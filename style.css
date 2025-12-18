@@ -1,0 +1,42 @@
+:root {
+    --primary: #2c3e50;
+    --secondary: #34495e;
+    --accent: #27ae60;
+    --bg: #f4f6f7;
+    --text: #333;
+}
+
+* { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+
+body { margin: 0; padding: 0; background-color: var(--bg); color: var(--text); }
+
+/* Layouts */
+.container { max-width: 1000px; margin: 20px auto; padding: 0 15px; }
+.login-container { display: flex; justify-content: center; align-items: center; height: 100vh; }
+.row { display: flex; gap: 15px; }
+.row .form-group { flex: 1; }
+.mt-20 { margin-top: 20px; }
+
+/* Cards */
+.card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+
+/* Navbar */
+.navbar { background: var(--primary); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
+.logo { font-weight: bold; font-size: 1.2rem; }
+
+/* Forms */
+.form-group { margin-bottom: 15px; }
+label { display: block; margin-bottom: 5px; font-weight: 500; font-size: 0.9rem; }
+input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+
+/* Buttons */
+button { cursor: pointer; border: none; padding: 10px 15px; border-radius: 4px; font-weight: bold; }
+.btn-primary { background: var(--primary); color: white; width: 100%; }
+.btn-success { background: var(--accent); color: white; }
+.btn-small { background: #c0392b; color: white; padding: 5px 10px; font-size: 0.8rem; }
+
+/* Table */
+.table-responsive { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+th { background-color: #f8f9fa; }

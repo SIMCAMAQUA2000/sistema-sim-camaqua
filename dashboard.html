@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Controle - SIM</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo"><i class="fas fa-shield-alt"></i> SIM - Gestão</div>
+        <div class="user-info">
+            <span id="userEmail">Carregando...</span>
+            <button id="logoutBtn" class="btn-small"><i class="fas fa-sign-out-alt"></i> Sair</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        
+        <details class="card mb-20" open>
+            <summary><strong><i class="fas fa-plus-circle"></i> Novo Estabelecimento</strong></summary>
+            <form id="cadastroForm" style="margin-top: 15px;">
+                
+                <h4 style="border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 0;">Dados da Empresa</h4>
+                <div class="row">
+                    <div class="form-group">
+                        <label>Número SIM</label>
+                        <input type="text" id="numSim" required placeholder="Ex: 001">
+                    </div>
+                    <div class="form-group">
+                        <label>Data de Registro</label>
+                        <input type="date" id="dataRegistro">
+                    </div>
+                    <div class="form-group">
+                        <label>CNPJ / CPF</label>
+                        <input type="text" id="cnpj" required placeholder="00.000.000/0000-00">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label>Razão Social</label>
+                        <input type="text" id="razaoSocial" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Nome Fantasia</label>
+                        <input type="text" id="nomeFantasia" placeholder="Ex: Boa nova embutidos">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label>Inscrição Estadual</label>
+                        <input type="text" id="inscricaoEstadual">
+                    </div>
+                    <div class="form-group">
+                        <label>Nome do Proprietário</label>
+                        <input type="text" id="nomeProprietario">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label>Classificação</label>
+                        <select id="classificacao">
+                            <option value="Abatedouro Frigorífico">Abatedouro Frigorífico</option>
+                            <option value="Unidade de Beneficiamento de Carne">Unid. Beneficiamento de Carne</option>
+                            <option value="Fábrica de Laticínios">Fábrica de Laticínios</option>
+                            <option value="Entreposto">Entreposto</option>
+                            <option value="Mel e Derivados">Mel e Derivados</option>
+                            <option value="Ovos e Derivados">Ovos e Derivados</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Espécie Abatida (se houver)</label>
+                        <input type="text" id="especieAbatida" placeholder="Ex: Bovinos, Suínos">
+                    </div>
+                </div>
+
+                <h4 style="border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 15px;">Localização e Contato</h4>
+                <div class="row">
+                    <div class="form-group">
+                        <label>Endereço</label>
+                        <input type="text" id="endereco" placeholder="Rua/Estrada, km">
+                    </div>
+                    <div class="form-group">
+                        <label>CEP</label>
+                        <input type="text" id="cep">
+                    </div>
+                    <div class="form-group">
+                        <label>Município</label>
+                        <input type="text" id="municipio" value="Camaquã-RS">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="form-group">
+                        <label>Telefone</label>
+                        <input type="text" id="telefone">
+                    </div>
+                    <div class="form-group">
+                        <label>Email (Endereço Eletrônico)</label>
+                        <input type="email" id="emailContato">
+                    </div>
+                </div>
+
+                <h4 style="border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 15px;">Responsável Técnico</h4>
+                <div class="row">
+                    <div class="form-group">
+                        <label>Nome do RT</label>
+                        <input type="text" id="responsavelTecnico">
+                    </div>
+                    <div class="form-group">
+                        <label>CRMV / Registro</label>
+                        <input type="text" id="crmv">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-success" style="margin-top: 15px;"><i class="fas fa-save"></i> Salvar Cadastro Completo</button>
+            </form>
+        </details>
+
+        <div class="search-bar">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchInput" placeholder="Pesquisar por Nome Fantasia, Razão Social ou Nº SIM...">
+        </div>
+
+        <section class="card">
+            <h3><i class="fas fa-list"></i> Estabelecimentos</h3>
+            <div class="table-responsive">
+                <table id="tabelaEstabelecimentos">
+                    <thead>
+                        <tr>
+                            <th>Nº SIM</th>
+                            <th>Nome Fantasia / Razão</th>
+                            <th>CNPJ</th>
+                            <th>Classificação</th>
+                            <th>Status</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

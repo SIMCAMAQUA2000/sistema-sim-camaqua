@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão de Documentos - SIM</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo"><i class="fas fa-folder-open"></i> Documentos do Estabelecimento</div>
+        <div>
+            <a href="dashboard.html" class="btn-primary" style="text-decoration: none; font-size: 0.9rem;">
+                <i class="fas fa-arrow-left"></i> Voltar ao Painel
+            </a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="card mb-20" style="border-left: 5px solid #2c3e50;">
+            <h2 id="tituloEmpresa">Carregando dados...</h2>
+            <p id="subtituloEmpresa">CNPJ: ... | SIM: ...</p>
+        </div>
+
+        <div class="card mb-20">
+            <h3><i class="fas fa-cloud-upload-alt"></i> Anexar Novo Documento</h3>
+            <form id="uploadForm">
+                <div class="row">
+                    <div class="form-group">
+                        <label>Tipo de Documento</label>
+                        <select id="tipoDoc" required>
+                            <option value="Alvará Sanitário">Alvará Sanitário</option>
+                            <option value="Planta Baixa">Planta Baixa</option>
+                            <option value="Cartão CNPJ">Cartão CNPJ</option>
+                            <option value="Memorial Descritivo">Memorial Descritivo</option>
+                            <option value="Análise de Água">Análise de Água</option>
+                            <option value="Outros">Outros</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Selecionar Arquivo (PDF ou Imagem)</label>
+                        <input type="file" id="arquivoInput" accept=".pdf, .jpg, .jpeg, .png" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn-success" id="btnUpload">
+                    <i class="fas fa-paperclip"></i> Enviar Arquivo
+                </button>
+                <p id="uploadStatus" style="margin-top: 10px; font-weight: bold;"></p>
+            </form>
+        </div>
+
+        <div class="card">
+            <h3><i class="fas fa-file-alt"></i> Arquivos Anexados</h3>
+            <div class="table-responsive">
+                <table id="tabelaDocumentos">
+                    <thead>
+                        <tr>
+                            <th>Data Envio</th>
+                            <th>Tipo</th>
+                            <th>Nome do Arquivo</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
