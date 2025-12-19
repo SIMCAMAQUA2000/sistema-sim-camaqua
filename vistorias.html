@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vistorias - SIM Digital</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo"><i class="fas fa-clipboard-check"></i> Controle de Vistorias</div>
+        <div>
+            <a href="dashboard.html" class="btn-primary" style="text-decoration: none; font-size: 0.9rem;">
+                <i class="fas fa-arrow-left"></i> Voltar ao Painel
+            </a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="card mb-20" style="border-left: 5px solid #8e44ad;">
+            <h2 id="tituloEmpresa">Carregando...</h2>
+            <p id="subtituloEmpresa">...</p>
+        </div>
+
+        <div class="card mb-20">
+            <h3><i class="fas fa-plus-circle"></i> Nova Vistoria</h3>
+            <form id="vistoriaForm">
+                <div class="row">
+                    <div class="form-group">
+                        <label>Data da Realização</label>
+                        <input type="date" id="dataVistoria" required style="font-weight: bold; color: #2c3e50;">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Resultado da Inspeção</label>
+                        <select id="statusVistoria" required style="font-weight: bold;">
+                            <option value="satisfatoria">🟢 SATISFATÓRIA (Aprovado)</option>
+                            <option value="com_deficiencias">⚠️ COM DEFICIÊNCIAS (Ajustes)</option>
+                            <option value="grave_deficiencia">🔴 COM GRAVES DEFICIÊNCIAS (Risco)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="form-group">
+                        <label>Anexar Relatório/Foto (Obrigatório)</label>
+                        <input type="file" id="arquivoVistoria" accept=".pdf,image/*" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Observações / Pendências Encontradas</label>
+                    <textarea id="obsVistoria" rows="3" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:4px;" placeholder="Descreva os problemas encontrados ou observações gerais..."></textarea>
+                </div>
+
+                <div class="row" style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #e9ecef;">
+                    <div class="form-group">
+                        <label>Agendar Próxima Vistoria em:</label>
+                        <select id="prazoProxima" required>
+                            <option value="15">15 Dias</option>
+                            <option value="30" selected>30 Dias (Padrão)</option>
+                            <option value="60">60 Dias</option>
+                            <option value="90">90 Dias</option>
+                            <option value="180">6 Meses</option>
+                            <option value="365">1 Ano</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Data Calculada do Retorno</label>
+                        <input type="date" id="dataProxima" readonly style="background: #e9ecef; font-weight:bold; cursor: not-allowed;">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-success" id="btnSalvarVistoria" style="background-color: #8e44ad;">
+                    <i class="fas fa-save"></i> Registrar Vistoria
+                </button>
+                <p id="statusMsg" style="margin-top: 10px; font-weight: bold;"></p>
+            </form>
+        </div>
+
+        <div class="card">
+            <h3><i class="fas fa-history"></i> Histórico de Inspeções</h3>
+            <div class="table-responsive">
+                <table id="tabelaVistorias">
+                    <thead>
+                        <tr>
+                            <th>Data Realização</th>
+                            <th>Status / Resultado</th>
+                            <th>Relatório</th>
+                            <th>Próxima Visita</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
