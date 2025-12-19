@@ -3,10 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vistorias - SIM Digital</title>
+    <title>Vistorias - SIM Camaquã</title>
     <link rel="stylesheet" href="style.css">
+    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* Card Estilizado */
+        .card {
+            background: #ffffff;
+            border-radius: 15px; /* Bordas bem arredondadas */
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08); /* Sombra elegante */
+            border: 1px solid #f0f0f0;
+            padding: 30px;
+            margin-bottom: 25px;
+            transition: all 0.3s ease; /* Animação suave */
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Efeito ao passar o mouse */
+        .card:hover {
+            transform: translateY(-5px); /* Sobe um pouquinho */
+            box-shadow: 0 15px 35px rgba(0,0,0,0.12);
+            border-color: #e0e0e0;
+        }
+
+        /* Detalhe colorido na lateral esquerda (opcional, dá um charme) */
+        .card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 4px;
+            background: linear-gradient(to bottom, #3498db, #2980b9);
+            border-radius: 4px 0 0 4px;
+        }
+
+        /* Títulos dentro dos cards */
+        .card h3 {
+            color: #2c3e50;
+            font-size: 1.4rem;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        /* Botões mais bonitos */
+        .btn-success, .btn-primary {
+            border-radius: 8px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar">
@@ -19,23 +78,22 @@
     </nav>
 
     <div class="container">
-        <div class="card mb-20" style="border-left: 5px solid #8e44ad;">
-            <h2 id="tituloEmpresa">Carregando...</h2>
-            <p id="subtituloEmpresa">...</p>
+        <div class="card mb-20" style="border-left: none;"> <h2 id="tituloEmpresa" style="margin: 0; color: #2c3e50;">Carregando...</h2>
+            <p id="subtituloEmpresa" style="color: #7f8c8d; margin-top: 5px;">...</p>
         </div>
 
         <div class="card mb-20">
-            <h3><i class="fas fa-plus-circle"></i> Nova Vistoria</h3>
+            <h3><i class="fas fa-plus-circle" style="color: #27ae60;"></i> Nova Vistoria</h3>
             <form id="vistoriaForm">
                 <div class="row">
                     <div class="form-group">
                         <label>Data da Realização</label>
-                        <input type="date" id="dataVistoria" required style="font-weight: bold; color: #2c3e50;">
+                        <input type="date" id="dataVistoria" required style="font-weight: bold; color: #2c3e50; padding: 10px; border-radius: 8px;">
                     </div>
                     
                     <div class="form-group">
                         <label>Resultado da Inspeção</label>
-                        <select id="statusVistoria" required style="font-weight: bold;">
+                        <select id="statusVistoria" required style="font-weight: bold; padding: 10px; border-radius: 8px;">
                             <option value="satisfatoria">🟢 SATISFATÓRIA (Aprovado)</option>
                             <option value="com_deficiencias">⚠️ COM DEFICIÊNCIAS (Ajustes)</option>
                             <option value="grave_deficiencia">🔴 COM GRAVES DEFICIÊNCIAS (Risco)</option>
@@ -46,19 +104,19 @@
                 <div class="row">
                     <div class="form-group">
                         <label>Anexar Relatório/Foto (Obrigatório)</label>
-                        <input type="file" id="arquivoVistoria" accept=".pdf,image/*" required>
+                        <input type="file" id="arquivoVistoria" accept=".pdf,image/*" required style="padding: 10px;">
                     </div>
                 </div>
 
                 <div class="form-group">
                     <label>Observações / Pendências Encontradas</label>
-                    <textarea id="obsVistoria" rows="3" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:4px;" placeholder="Descreva os problemas encontrados ou observações gerais..."></textarea>
+                    <textarea id="obsVistoria" rows="3" style="width:100%; padding:15px; border:1px solid #ddd; border-radius:8px;" placeholder="Descreva as não conformidades..."></textarea>
                 </div>
 
-                <div class="row" style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #e9ecef;">
+                <div class="row" style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #e9ecef;">
                     <div class="form-group">
                         <label>Agendar Próxima Vistoria em:</label>
-                        <select id="prazoProxima" required>
+                        <select id="prazoProxima" required style="border-radius: 8px;">
                             <option value="15">15 Dias</option>
                             <option value="30" selected>30 Dias (Padrão)</option>
                             <option value="60">60 Dias</option>
@@ -69,19 +127,19 @@
                     </div>
                     <div class="form-group">
                         <label>Data Calculada do Retorno</label>
-                        <input type="date" id="dataProxima" readonly style="background: #e9ecef; font-weight:bold; cursor: not-allowed;">
+                        <input type="date" id="dataProxima" readonly style="background: #e9ecef; font-weight:bold; cursor: not-allowed; border-radius: 8px;">
                     </div>
                 </div>
 
-                <button type="submit" class="btn-success" id="btnSalvarVistoria" style="background-color: #8e44ad;">
+                <button type="submit" class="btn-success" id="btnSalvarVistoria" style="background-color: #8e44ad; width: 100%; padding: 12px;">
                     <i class="fas fa-save"></i> Registrar Vistoria
                 </button>
-                <p id="statusMsg" style="margin-top: 10px; font-weight: bold;"></p>
+                <p id="statusMsg" style="margin-top: 10px; font-weight: bold; text-align: center;"></p>
             </form>
         </div>
 
         <div class="card">
-            <h3><i class="fas fa-history"></i> Histórico de Inspeções</h3>
+            <h3><i class="fas fa-history" style="color: #3498db;"></i> Histórico de Inspeções</h3>
             <div class="table-responsive">
                 <table id="tabelaVistorias">
                     <thead>

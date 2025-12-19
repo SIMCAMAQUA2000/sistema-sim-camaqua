@@ -3,9 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel de Controle - SIM</title>
+    <title>Painel de Controle - SIM Camaquã</title>
     <link rel="stylesheet" href="style.css">
+    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
@@ -19,8 +24,8 @@
 
     <div class="container">
         
-        <details class="card mb-20" open>
-            <summary><strong><i class="fas fa-plus-circle"></i> Novo Estabelecimento</strong></summary>
+        <details class="card mb-20">
+            <summary><strong><i class="fas fa-plus-circle"></i> Novo Estabelecimento</strong> (Clique para abrir)</summary>
             <form id="cadastroForm" style="margin-top: 15px;">
                 
                 <h4 style="border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 0;">Dados da Empresa</h4>
@@ -46,7 +51,7 @@
                     </div>
                     <div class="form-group">
                         <label>Nome Fantasia</label>
-                        <input type="text" id="nomeFantasia" placeholder="Ex: Boa nova embutidos">
+                        <input type="text" id="nomeFantasia">
                     </div>
                 </div>
 
@@ -66,7 +71,7 @@
                         <label>Classificação</label>
                         <select id="classificacao">
                             <option value="Abatedouro Frigorífico">Abatedouro Frigorífico</option>
-                            <option value="Unidade de Beneficiamento de Carne">Unid. Beneficiamento de Carne</option>
+                            <option value="Unidade de Beneficiamento de Carne de Carne e Produtos Cárneos">Unidade de Beneficiamento de Carne e Produtos Cárneos</option>
                             <option value="Fábrica de Laticínios">Fábrica de Laticínios</option>
                             <option value="Entreposto">Entreposto</option>
                             <option value="Mel e Derivados">Mel e Derivados</option>
@@ -75,7 +80,7 @@
                     </div>
                     <div class="form-group">
                         <label>Espécie Abatida (se houver)</label>
-                        <input type="text" id="especieAbatida" placeholder="Ex: Bovinos, Suínos">
+                        <input type="text" id="especieAbatida">
                     </div>
                 </div>
 
@@ -83,7 +88,7 @@
                 <div class="row">
                     <div class="form-group">
                         <label>Endereço</label>
-                        <input type="text" id="endereco" placeholder="Rua/Estrada, km">
+                        <input type="text" id="endereco">
                     </div>
                     <div class="form-group">
                         <label>CEP</label>
@@ -100,7 +105,7 @@
                         <input type="text" id="telefone">
                     </div>
                     <div class="form-group">
-                        <label>Email (Endereço Eletrônico)</label>
+                        <label>Email</label>
                         <input type="email" id="emailContato">
                     </div>
                 </div>
@@ -117,24 +122,24 @@
                     </div>
                 </div>
 
-                <button type="submit" class="btn-success" style="margin-top: 15px;"><i class="fas fa-save"></i> Salvar Cadastro Completo</button>
+                <button type="submit" class="btn-success" style="margin-top: 15px;"><i class="fas fa-save"></i> Salvar Cadastro</button>
             </form>
         </details>
 
         <div class="search-bar">
             <i class="fas fa-search"></i>
-            <input type="text" id="searchInput" placeholder="Pesquisar por Nome Fantasia, Razão Social ou Nº SIM...">
+            <input type="text" id="searchInput" placeholder="Pesquisar por Nome, CNPJ ou Nº SIM...">
         </div>
 
         <section class="card">
-            <h3><i class="fas fa-list"></i> Estabelecimentos</h3>
+            <h3><i class="fas fa-list"></i> Estabelecimentos Registrados</h3>
             <div class="table-responsive">
                 <table id="tabelaEstabelecimentos">
                     <thead>
                         <tr>
                             <th>Nº SIM</th>
-                            <th>Nome Fantasia / Razão</th>
-                            <th>CNPJ</th>
+                            <th>Estabelecimento</th>
+                            <th>CNPJ/CPF</th>
                             <th>Classificação</th>
                             <th>Status</th>
                             <th>Ações</th>
@@ -145,7 +150,9 @@
                 </table>
             </div>
         </section>
+
     </div>
+
     <script src="script.js"></script>
 </body>
 </html>
