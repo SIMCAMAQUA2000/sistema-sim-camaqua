@@ -1,0 +1,9 @@
+[build]
+  publish = "."
+
+# Garante que, se você usar History PushState no futuro, as rotas não quebrem
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  force = false

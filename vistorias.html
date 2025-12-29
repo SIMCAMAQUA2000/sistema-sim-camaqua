@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="style.css">
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
 
@@ -17,147 +17,245 @@
         /* Card Estilizado */
         .card {
             background: #ffffff;
-            border-radius: 15px; /* Bordas bem arredondadas */
-            box-shadow: 0 10px 30px rgba(0,0,0,0.08); /* Sombra elegante */
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
             border: 1px solid #f0f0f0;
             padding: 30px;
             margin-bottom: 25px;
-            transition: all 0.3s ease; /* Animação suave */
+            transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
         }
-
-        /* Efeito ao passar o mouse */
-        .card:hover {
-            transform: translateY(-5px); /* Sobe um pouquinho */
-            box-shadow: 0 15px 35px rgba(0,0,0,0.12);
-            border-color: #e0e0e0;
-        }
-
-        /* Detalhe colorido na lateral esquerda (opcional, dá um charme) */
+        .card:hover { transform: translateY(-5px); box-shadow: 0 15px 35px rgba(0,0,0,0.12); border-color: #e0e0e0; }
         .card::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            height: 100%;
-            width: 4px;
-            background: linear-gradient(to bottom, #3498db, #2980b9);
-            border-radius: 4px 0 0 4px;
+            content: ''; position: absolute; left: 0; top: 0; height: 100%; width: 4px;
+            background: linear-gradient(to bottom, #3498db, #2980b9); border-radius: 4px 0 0 4px;
+        }
+        .card h3 {
+            color: #2c3e50; font-size: 1.4rem; margin-bottom: 20px; padding-bottom: 10px;
+            border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 10px;
+        }
+        .btn-success, .btn-primary {
+            border-radius: 8px; font-weight: 600; letter-spacing: 0.5px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
 
-        /* Títulos dentro dos cards */
-        .card h3 {
-            color: #2c3e50;
-            font-size: 1.4rem;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+        /* ESTILOS ESPECÍFICOS DO CHECKLIST */
+        .checklist-group { margin-bottom: 15px; border: 1px solid #bdc3c7; border-radius: 8px; overflow: hidden; }
+        
+        .checklist-header {
+            background: #ecf0f1; padding: 15px; cursor: pointer; font-weight: 700; color: #2c3e50;
+            display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd;
+        }
+        .checklist-header:hover { background: #dfe6e9; }
+        
+        .checklist-body { display: none; background: #fff; }
+        .checklist-body.open { display: block; }
+        
+        .check-item { 
+            display: flex; flex-direction: column; padding: 12px 15px; border-bottom: 1px solid #eee; 
+        }
+        .check-item:nth-child(even) { background-color: #fcfcfc; }
+        
+        .check-question { font-size: 0.95rem; color: #34495e; margin-bottom: 8px; font-weight: 500; }
+        .check-number { font-weight: bold; color: #7f8c8d; margin-right: 5px; }
+
+        .check-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+        
+        /* Botões de Opção */
+        .opt-btn {
+            flex: 1; border: 1px solid #bdc3c7; background: #fff; color: #7f8c8d;
+            padding: 6px 5px; font-size: 0.8rem; border-radius: 4px; cursor: pointer;
+            transition: all 0.2s; font-weight: bold; min-width: 40px;
         }
         
-        /* Botões mais bonitos */
-        .btn-success, .btn-primary {
-            border-radius: 8px;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        /* Cores Ativas */
+        .opt-btn[data-val="C"].active { background: #27ae60; color: white; border-color: #27ae60; }
+        .opt-btn[data-val="CR"].active { background: #f1c40f; color: white; border-color: #f1c40f; }
+        .opt-btn[data-val="NC"].active { background: #c0392b; color: white; border-color: #c0392b; }
+        .opt-btn[data-val="NA"].active { background: #95a5a6; color: white; border-color: #95a5a6; }
+        .opt-btn[data-val="NO"].active { background: #34495e; color: white; border-color: #34495e; }
+
+        .legend-bar { 
+            display: flex; gap: 10px; font-size: 0.75rem; color: #666; justify-content: center; 
+            margin-bottom: 20px; background: #f8f9fa; padding: 10px; border-radius: 5px; flex-wrap: wrap;
+        }
+        .badge-legend { padding: 2px 6px; border-radius: 3px; color: #fff; font-weight: bold; margin-right: 3px; }
+
+        @media (min-width: 768px) {
+            .check-item { flex-direction: row; align-items: center; justify-content: space-between; }
+            .check-question { margin-bottom: 0; padding-right: 15px; flex: 1; }
+            .check-actions { width: 280px; }
         }
     </style>
 </head>
 <body>
     <nav class="navbar">
-        <div class="logo"><i class="fas fa-clipboard-check"></i> Controle de Vistorias</div>
+        <div class="logo"><i class="fas fa-clipboard-list"></i> Checklist de Vistoria</div>
         <div>
-            <a href="dashboard.html" class="btn-primary" style="text-decoration: none; font-size: 0.9rem;">
-                <i class="fas fa-arrow-left"></i> Voltar ao Painel
-            </a>
+            <a href="dashboard.html" class="btn-primary" style="text-decoration: none;"><i class="fas fa-arrow-left"></i> Painel</a>
         </div>
     </nav>
 
     <div class="container">
-        <div class="card mb-20" style="border-left: none;"> <h2 id="tituloEmpresa" style="margin: 0; color: #2c3e50;">Carregando...</h2>
+        <div class="card mb-20" style="border-left: 5px solid #2980b9;"> 
+            <h2 id="tituloEmpresa" style="margin: 0; color: #2c3e50;">Carregando...</h2>
             <p id="subtituloEmpresa" style="color: #7f8c8d; margin-top: 5px;">...</p>
         </div>
 
-        <div class="card mb-20">
-            <h3><i class="fas fa-plus-circle" style="color: #27ae60;"></i> Nova Vistoria</h3>
-            <form id="vistoriaForm">
+        <form id="vistoriaForm">
+            <div class="card mb-20">
+                <h3><i class="fas fa-calendar-alt"></i> Dados da Inspeção</h3>
                 <div class="row">
                     <div class="form-group">
                         <label>Data da Realização</label>
-                        <input type="date" id="dataVistoria" required style="font-weight: bold; color: #2c3e50; padding: 10px; border-radius: 8px;">
+                        <input type="date" id="dataVistoria" required style="font-weight: bold; padding: 10px; width: 100%;">
                     </div>
-                    
                     <div class="form-group">
-                        <label>Resultado da Inspeção</label>
-                        <select id="statusVistoria" required style="font-weight: bold; padding: 10px; border-radius: 8px;">
-                            <option value="satisfatoria">🟢 SATISFATÓRIA (Aprovado)</option>
-                            <option value="com_deficiencias">⚠️ COM DEFICIÊNCIAS (Ajustes)</option>
-                            <option value="grave_deficiencia">🔴 COM GRAVES DEFICIÊNCIAS (Risco)</option>
+                        <label>Conclusão da Avaliação (Item 7)</label>
+                        <select id="conclusaoSelect" required style="font-weight: bold; padding: 10px; background-color: #fff3cd; width: 100%;">
+                            <option value="">Selecione a Conclusão...</option>
+                            <option value="7.1">7.1 - Satisfatório (Aprovado)</option>
+                            <option value="7.2">7.2 - Deficiências (Gera RNC)</option>
+                            <option value="7.3">7.3 - Graves Deficiências (Risco/RNC)</option>
                         </select>
                     </div>
                 </div>
+            </div>
 
+            <div class="legend-bar">
+                <span><span class="badge-legend" style="background:#27ae60">C</span>Conforme</span>
+                <span><span class="badge-legend" style="background:#f1c40f">CR</span>Restrição</span>
+                <span><span class="badge-legend" style="background:#c0392b">NC</span>Não Conforme</span>
+                <span><span class="badge-legend" style="background:#95a5a6">NA</span>Não Aplica</span>
+                <span><span class="badge-legend" style="background:#34495e">NO</span>Não Obs.</span>
+            </div>
+
+            <div class="checklist-group">
+                <div class="checklist-header" onclick="toggleGroup(this)">
+                    <span>1. Aspectos Gerais da Indústria</span> <i class="fas fa-chevron-down"></i>
+                </div>
+                <div class="checklist-body">
+                    <div class="check-item"><div class="check-question"><span class="check-number">1.1</span>Pavimentação externa ok?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">1.2</span>Área industrial delimitada?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">1.3</span>Ausência de pragas (interno/externo)?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.0</span>Pisos com boas condições?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.x</span>Paredes e Tetos limpos/conservados?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.x</span>Iluminação protegida e ventilação adequada?</div></div>
+                </div>
+            </div>
+
+            <div class="checklist-group">
+                <div class="checklist-header" onclick="toggleGroup(this)">
+                    <span>2. Higiene e Hábitos</span> <i class="fas fa-chevron-down"></i>
+                </div>
+                <div class="checklist-body">
+                    <div class="check-item"><div class="check-question"><span class="check-number">H.1</span>Uniformes limpos e completos?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">H.2</span>Hábitos higiênicos adequados?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">H.3</span>Vestiários/Sanitários limpos?</div></div>
+                </div>
+            </div>
+
+            <div class="checklist-group">
+                <div class="checklist-header" onclick="toggleGroup(this)">
+                    <span>3. Processo e Documentação</span> <i class="fas fa-chevron-down"></i>
+                </div>
+                <div class="checklist-body">
+                    <div class="check-item"><div class="check-question"><span class="check-number">P.1</span>Temperaturas de produção/estocagem ok?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">P.2</span>Planilhas de autocontrole preenchidas?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">P.3</span>Rótulos e datas de validade corretos?</div></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h4 style="color:#c0392b; margin-top:0;">
+                    <i class="fas fa-exclamation-triangle"></i> Não Conformidades (Para RNC)
+                </h4>
+                <p style="font-size:0.8rem; color:#777;">Os itens marcados como <strong>NC</strong> acima preenchem este campo automaticamente.</p>
+                <textarea id="obsVistoria" rows="6" style="width:100%; padding:15px; border:1px solid #c0392b; border-radius:8px; font-family: monospace;" placeholder="Descreva as não conformidades..."></textarea>
+                
+                <div style="margin-top: 15px;">
+                    <label style="font-weight:bold;">Anexar PDF/Foto do Checklist:</label>
+                    <input type="file" id="arquivoVistoria" accept=".pdf,image/*" required style="width:100%;">
+                </div>
+            </div>
+
+            <div class="card" style="background:#f8f9fa;">
                 <div class="row">
                     <div class="form-group">
-                        <label>Anexar Relatório/Foto (Obrigatório)</label>
-                        <input type="file" id="arquivoVistoria" accept=".pdf,image/*" required style="padding: 10px;">
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Observações / Pendências Encontradas</label>
-                    <textarea id="obsVistoria" rows="3" style="width:100%; padding:15px; border:1px solid #ddd; border-radius:8px;" placeholder="Descreva as não conformidades..."></textarea>
-                </div>
-
-                <div class="row" style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #e9ecef;">
-                    <div class="form-group">
-                        <label>Agendar Próxima Vistoria em:</label>
-                        <select id="prazoProxima" required style="border-radius: 8px;">
+                        <label>Próxima Vistoria em:</label>
+                        <select id="prazoProxima" style="padding:8px; width:100%;">
                             <option value="15">15 Dias</option>
-                            <option value="30" selected>30 Dias (Padrão)</option>
+                            <option value="30" selected>30 Dias</option>
                             <option value="60">60 Dias</option>
                             <option value="90">90 Dias</option>
-                            <option value="180">6 Meses</option>
-                            <option value="365">1 Ano</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Data Calculada do Retorno</label>
-                        <input type="date" id="dataProxima" readonly style="background: #e9ecef; font-weight:bold; cursor: not-allowed; border-radius: 8px;">
+                        <label>Data Retorno:</label>
+                        <input type="date" id="dataProxima" readonly style="background:#e9ecef; cursor:not-allowed; width:100%;">
                     </div>
                 </div>
+            </div>
 
-                <button type="submit" class="btn-success" id="btnSalvarVistoria" style="background-color: #8e44ad; width: 100%; padding: 12px;">
-                    <i class="fas fa-save"></i> Registrar Vistoria
-                </button>
-                <p id="statusMsg" style="margin-top: 10px; font-weight: bold; text-align: center;"></p>
-            </form>
-        </div>
+            <button type="submit" class="btn-success"><i class="fas fa-save"></i> Salvar Vistoria</button>
+        </form>
 
-        <div class="card">
-            <h3><i class="fas fa-history" style="color: #3498db;"></i> Histórico de Inspeções</h3>
+        <div class="card mt-20">
+            <h3>Histórico de Inspeções</h3>
             <div class="table-responsive">
                 <table id="tabelaVistorias">
-                    <thead>
-                        <tr>
-                            <th>Data Realização</th>
-                            <th>Status / Resultado</th>
-                            <th>Relatório</th>
-                            <th>Próxima Visita</th>
-                            <th>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        </tbody>
+                    <thead><tr><th>Data</th><th>Resultado</th><th>Relatório</th><th>Retorno</th><th>Ações</th></tr></thead>
+                    <tbody></tbody>
                 </table>
             </div>
         </div>
     </div>
 
+    <script src="config.js"></script>
     <script src="script.js"></script>
+
+    <script>
+        // Gera botões para cada item
+        document.querySelectorAll('.check-item').forEach(item => {
+            const actions = document.createElement('div');
+            actions.className = 'check-actions';
+            ['C', 'CR', 'NC', 'NA', 'NO'].forEach(opt => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'opt-btn';
+                btn.innerText = opt;
+                btn.dataset.val = opt;
+                btn.onclick = (e) => selectOption(e.target, item);
+                actions.appendChild(btn);
+            });
+            item.appendChild(actions);
+        });
+
+        function toggleGroup(header) {
+            header.nextElementSibling.classList.toggle('open');
+            header.querySelector('i').classList.toggle('fa-chevron-down');
+            header.querySelector('i').classList.toggle('fa-chevron-up');
+        }
+
+        function selectOption(btn, rowItem) {
+            rowItem.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            updateRNCText();
+        }
+
+        function updateRNCText() {
+            const ncItems = document.querySelectorAll('.opt-btn[data-val="NC"].active');
+            let text = "";
+            let count = 1;
+            ncItems.forEach(btn => {
+                const row = btn.closest('.check-item');
+                const label = row.querySelector('.check-question').innerText;
+                text += `${count}. ${label} - [Descreva o detalhe];\n`;
+                count++;
+            });
+            document.getElementById('obsVistoria').value = text;
+        }
+    </script>
 </body>
 </html>
