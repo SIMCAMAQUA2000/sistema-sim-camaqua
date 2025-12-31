@@ -10,71 +10,47 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
-
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
         /* Card Estilizado */
         .card {
-            background: #ffffff;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
-            border: 1px solid #f0f0f0;
-            padding: 30px;
-            margin-bottom: 25px;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
+            background: #ffffff; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            border: 1px solid #f0f0f0; padding: 30px; margin-bottom: 25px; position: relative;
         }
-        .card:hover { transform: translateY(-5px); box-shadow: 0 15px 35px rgba(0,0,0,0.12); border-color: #e0e0e0; }
-        .card::before {
-            content: ''; position: absolute; left: 0; top: 0; height: 100%; width: 4px;
-            background: linear-gradient(to bottom, #3498db, #2980b9); border-radius: 4px 0 0 4px;
-        }
-        .card h3 {
-            color: #2c3e50; font-size: 1.4rem; margin-bottom: 20px; padding-bottom: 10px;
-            border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 10px;
-        }
-        .btn-success, .btn-primary {
-            border-radius: 8px; font-weight: 600; letter-spacing: 0.5px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
+        .card h3 { color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
+        .btn-success { background: #27ae60; color: white; width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 1.1rem; border:none; cursor:pointer; }
+        .btn-primary { background: #2c3e50; color: white; padding: 8px 15px; border-radius: 5px; text-decoration: none; border:none; cursor:pointer; }
 
-        /* ESTILOS ESPECÍFICOS DO CHECKLIST */
+        /* ESTILOS DO CHECKLIST */
         .checklist-group { margin-bottom: 15px; border: 1px solid #bdc3c7; border-radius: 8px; overflow: hidden; }
-        
         .checklist-header {
             background: #ecf0f1; padding: 15px; cursor: pointer; font-weight: 700; color: #2c3e50;
             display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd;
         }
         .checklist-header:hover { background: #dfe6e9; }
-        
-        .checklist-body { display: none; background: #fff; }
+        .checklist-body { display: none; background: #fff; padding-bottom: 10px; }
         .checklist-body.open { display: block; }
-        
-        .check-item { 
-            display: flex; flex-direction: column; padding: 12px 15px; border-bottom: 1px solid #eee; 
-        }
+        .check-item { display: flex; flex-direction: column; padding: 12px 15px; border-bottom: 1px solid #eee; }
         .check-item:nth-child(even) { background-color: #fcfcfc; }
         
-        .check-question { font-size: 0.95rem; color: #34495e; margin-bottom: 8px; font-weight: 500; }
-        .check-number { font-weight: bold; color: #7f8c8d; margin-right: 5px; }
-
+        /* Ajuste para perguntas longas */
+        .check-question { font-size: 0.9rem; color: #34495e; margin-bottom: 8px; font-weight: 500; line-height: 1.4; }
+        .check-number { font-weight: bold; color: #7f8c8d; margin-right: 5px; min-width: 30px; display: inline-block; }
+        
         .check-actions { display: flex; gap: 5px; flex-wrap: wrap; }
         
         /* Botões de Opção */
         .opt-btn {
             flex: 1; border: 1px solid #bdc3c7; background: #fff; color: #7f8c8d;
-            padding: 6px 5px; font-size: 0.8rem; border-radius: 4px; cursor: pointer;
-            transition: all 0.2s; font-weight: bold; min-width: 40px;
+            padding: 8px 5px; font-size: 0.75rem; border-radius: 4px; cursor: pointer;
+            transition: all 0.2s; font-weight: bold; min-width: 35px;
         }
-        
-        /* Cores Ativas */
-        .opt-btn[data-val="C"].active { background: #27ae60; color: white; border-color: #27ae60; }
-        .opt-btn[data-val="CR"].active { background: #f1c40f; color: white; border-color: #f1c40f; }
-        .opt-btn[data-val="NC"].active { background: #c0392b; color: white; border-color: #c0392b; }
-        .opt-btn[data-val="NA"].active { background: #95a5a6; color: white; border-color: #95a5a6; }
-        .opt-btn[data-val="NO"].active { background: #34495e; color: white; border-color: #34495e; }
+        .opt-btn.active[data-val="C"] { background: #27ae60; color: white; border-color: #27ae60; }
+        .opt-btn.active[data-val="CR"] { background: #f1c40f; color: white; border-color: #f1c40f; }
+        .opt-btn.active[data-val="NC"] { background: #c0392b; color: white; border-color: #c0392b; }
+        .opt-btn.active[data-val="NA"] { background: #95a5a6; color: white; border-color: #95a5a6; }
+        .opt-btn.active[data-val="NO"] { background: #34495e; color: white; border-color: #34495e; }
 
         .legend-bar { 
             display: flex; gap: 10px; font-size: 0.75rem; color: #666; justify-content: center; 
@@ -85,7 +61,7 @@
         @media (min-width: 768px) {
             .check-item { flex-direction: row; align-items: center; justify-content: space-between; }
             .check-question { margin-bottom: 0; padding-right: 15px; flex: 1; }
-            .check-actions { width: 280px; }
+            .check-actions { width: 260px; flex-shrink: 0; }
         }
     </style>
 </head>
@@ -93,7 +69,7 @@
     <nav class="navbar">
         <div class="logo"><i class="fas fa-clipboard-list"></i> Checklist de Vistoria</div>
         <div>
-            <a href="dashboard.html" class="btn-primary" style="text-decoration: none;"><i class="fas fa-arrow-left"></i> Painel</a>
+            <a href="dashboard.html" class="btn-primary"><i class="fas fa-arrow-left"></i> Painel</a>
         </div>
     </nav>
 
@@ -109,11 +85,11 @@
                 <div class="row">
                     <div class="form-group">
                         <label>Data da Realização</label>
-                        <input type="date" id="dataVistoria" required style="font-weight: bold; padding: 10px; width: 100%;">
+                        <input type="date" id="dataVistoria" required style="font-weight: bold; padding: 10px; width: 100%; border:1px solid #ddd; border-radius:4px;">
                     </div>
                     <div class="form-group">
-                        <label>Conclusão da Avaliação (Item 7)</label>
-                        <select id="conclusaoSelect" required style="font-weight: bold; padding: 10px; background-color: #fff3cd; width: 100%;">
+                        <label>Conclusão da Avaliação</label>
+                        <select id="conclusaoSelect" required style="font-weight: bold; padding: 10px; background-color: #fff3cd; width: 100%; border:1px solid #ddd; border-radius:4px;">
                             <option value="">Selecione a Conclusão...</option>
                             <option value="7.1">7.1 - Satisfatório (Aprovado)</option>
                             <option value="7.2">7.2 - Deficiências (Gera RNC)</option>
@@ -136,46 +112,121 @@
                     <span>1. Aspectos Gerais da Indústria</span> <i class="fas fa-chevron-down"></i>
                 </div>
                 <div class="checklist-body">
-                    <div class="check-item"><div class="check-question"><span class="check-number">1.1</span>Pavimentação externa ok?</div></div>
-                    <div class="check-item"><div class="check-question"><span class="check-number">1.2</span>Área industrial delimitada?</div></div>
-                    <div class="check-item"><div class="check-question"><span class="check-number">1.3</span>Ausência de pragas (interno/externo)?</div></div>
-                    <div class="check-item"><div class="check-question"><span class="check-number">2.0</span>Pisos com boas condições?</div></div>
-                    <div class="check-item"><div class="check-question"><span class="check-number">2.x</span>Paredes e Tetos limpos/conservados?</div></div>
-                    <div class="check-item"><div class="check-question"><span class="check-number">2.x</span>Iluminação protegida e ventilação adequada?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">1.1</span>A pavimentação das áreas externas permite o escoamento de águas residuais e impede a formação de poças d’água, de barro e de poeira?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">1.2</span>A área industrial é delimitada?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">1.3</span>Não há vestígios da presença de pragas nas áreas internas e externas?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">1.4</span>A organização e manutenção da área externa evitam a presença e a proliferação de pragas?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">1.5</span>As áreas adjacentes à empresa não oferecem riscos higiênico-sanitários?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">1.6</span>As áreas adjacentes à empresa são livres de odores indesejáveis?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">1.7</span>A empresa apresenta dependências mínimas para realizar o processamento a que se dispõe e estão em número suficiente para a atividade executada, incluindo os anexos?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">1.8</span>As dependências são utilizadas para o fim a que se destinam?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">1.9</span>Há barreiras sanitárias completas e funcionais em todos os acessos de pessoal às seções de manipulação de produtos?</div></div>
                 </div>
             </div>
 
             <div class="checklist-group">
                 <div class="checklist-header" onclick="toggleGroup(this)">
-                    <span>2. Higiene e Hábitos</span> <i class="fas fa-chevron-down"></i>
+                    <span>2. Estrutura, Instalações e Equipamentos</span> <i class="fas fa-chevron-down"></i>
                 </div>
                 <div class="checklist-body">
-                    <div class="check-item"><div class="check-question"><span class="check-number">H.1</span>Uniformes limpos e completos?</div></div>
-                    <div class="check-item"><div class="check-question"><span class="check-number">H.2</span>Hábitos higiênicos adequados?</div></div>
-                    <div class="check-item"><div class="check-question"><span class="check-number">H.3</span>Vestiários/Sanitários limpos?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.0</span>Os pisos apresentam boas condições de higiene e conservação?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.1</span>Os pisos possuem, quando necessário, caimento em direção aos ralos e canaletas?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.2</span>Os ralos são sifonados?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.3</span>Na presença de grades protetoras nas canaletas as mesmas são removíveis?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.4</span>As paredes apresentam boas condições de higiene e conservação, com impermeabilização quando necessário?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.5</span>O teto/forro apresenta boas condições de higiene e conservação?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.6</span>A iluminação é de tipo adequado e suficiente nas diversas áreas da indústria, em especial nas áreas de inspeção?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.7</span>Todas as luminárias possuem proteção contra queda e estilhaçamento, quando necessário?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.8</span>A ventilação/exaustão nas diferentes seções é suficiente e adequada?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.1*</span>As aberturas (janelas, óculos e portas) apresentam boas condições de higiene e conservação, com fechamento automático ou telas?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.2*</span>Há pias e higienizadores de utensílios funcionais em todos os locais necessários?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.3*</span>Há renovação constante de água dos higienizadores?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.4*</span>As estruturas da indústria apresentam boas condições de higiene e conservação?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.5*</span>Os equipamentos da indústria apresentam boas condições de higiene e conservação?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.6*</span>A disposição dos equipamentos permite adequada circulação de pessoas e produtos?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.7*</span>As pias possuem canalização até as proximidades do piso (sem acúmulo de água)?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.8*</span>Todos os equipamentos em contato direto com produtos são de inox ou material adequado?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.9</span>Existe estrutura adequada para higienização de caixas e armazenamento das caixas higienizadas?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.10</span>Existe seção específica para armazenamento e montagem de embalagens secundárias?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.11</span>As portas de expedição favorecem a acoplagem dos veículos transportadores?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.12</span>Existe almoxarifado com separação entre área limpa e suja, organizado?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.13</span>Os resíduos industriais e lixo são acondicionados em local adequado até descarte?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.14</span>As câmaras e túneis apresentam boas condições de higiene, conservação e organização?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.15</span>O fluxograma operacional não permite contaminação cruzada?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.16</span>Fluxograma e materiais permitem higienização eficiente?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.17</span>Existe estrutura adequada para higienização de caixas?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.18</span>Uso de embalagens secundárias tem seção específica?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.19</span>Portas de expedição favorecem acoplagem?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.20</span>Existe almoxarifado com separação limpa/suja?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.21</span>Resíduos/Lixo acondicionados adequadamente?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.22</span>Câmaras e túneis em boas condições?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.23.1</span>Ausência de contra fluxo?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.23.2</span>Não há manipulação de embalagens secundárias na área de processamento?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.23.3</span>Ausência de trânsito de material estranho na área de processamento?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.23.4</span>Ausência de outras fontes de contaminação?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.24</span>Fluxograma e materiais permitem higienização eficiente?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.25</span>Instalações e equipamentos de acordo com o projeto aprovado?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.26</span>A caldeira é adequada e seu entorno organizado?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">2.27</span>O abate humanitário é eficiente?</div></div>
                 </div>
             </div>
 
             <div class="checklist-group">
                 <div class="checklist-header" onclick="toggleGroup(this)">
-                    <span>3. Processo e Documentação</span> <i class="fas fa-chevron-down"></i>
+                    <span>3. Higiene e Hábitos Pessoais dos Manipuladores</span> <i class="fas fa-chevron-down"></i>
                 </div>
                 <div class="checklist-body">
-                    <div class="check-item"><div class="check-question"><span class="check-number">P.1</span>Temperaturas de produção/estocagem ok?</div></div>
-                    <div class="check-item"><div class="check-question"><span class="check-number">P.2</span>Planilhas de autocontrole preenchidas?</div></div>
-                    <div class="check-item"><div class="check-question"><span class="check-number">P.3</span>Rótulos e datas de validade corretos?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">3.1</span>Os funcionários utilizam uniformes, limpos, sem manchas e completos conforme a função?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">3.2</span>Os manipuladores possuem hábitos higiênicos adequados (barba, adornos)?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">3.3</span>Os vestiários e sanitários são suficientes, funcionais e limpos?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">3.4</span>Os EPIs utilizados apresentam boas condições e são guardados em local adequado?</div></div>
+                </div>
+            </div>
+
+            <div class="checklist-group">
+                <div class="checklist-header" onclick="toggleGroup(this)">
+                    <span>4. Água de Abastecimento</span> <i class="fas fa-chevron-down"></i>
+                </div>
+                <div class="checklist-body">
+                    <div class="check-item"><div class="check-question"><span class="check-number">4.1</span>Existe clorador automático e o nível de cloro está de acordo com a legislação?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">4.2</span>Existe água quente e/ou vapor disponível para higienização?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">4.3</span>Os reservatórios de água são mantidos em boas condições de conservação e higiene?</div></div>
+                </div>
+            </div>
+
+            <div class="checklist-group">
+                <div class="checklist-header" onclick="toggleGroup(this)">
+                    <span>5. Produção de Frio e Estocagem</span> <i class="fas fa-chevron-down"></i>
+                </div>
+                <div class="checklist-body">
+                    <div class="check-item"><div class="check-question"><span class="check-number">5.1</span>A produção de frio é adequada nas seções obrigatoriamente climatizadas?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">5.2</span>Há prateleiras, estrados e pallets para adequada estocagem?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">5.3</span>As temperaturas dos produtos estão de acordo com a legislação vigente?</div></div>
+                </div>
+            </div>
+
+            <div class="checklist-group">
+                <div class="checklist-header" onclick="toggleGroup(this)">
+                    <span>6. Registros e Documentações</span> <i class="fas fa-chevron-down"></i>
+                </div>
+                <div class="checklist-body">
+                    <div class="check-item"><div class="check-question"><span class="check-number">6.1</span>A empresa mantém os processos de registro de produtos e rótulos atualizados?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">6.2</span>Os produtos são elaborados e rotulados conforme memoriais aprovados?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">6.3</span>As datas de produção/lote e validade estão registradas de forma clara?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">6.4</span>A empresa cumpre o cronograma próprio de análises de produtos?</div></div>
+                    <div class="check-item"><div class="check-question"><span class="check-number">6.5</span>A empresa respeita a capacidade máxima de produção estabelecida?</div></div>
                 </div>
             </div>
 
             <div class="card">
                 <h4 style="color:#c0392b; margin-top:0;">
-                    <i class="fas fa-exclamation-triangle"></i> Não Conformidades (Para RNC)
+                    <i class="fas fa-exclamation-triangle"></i> Não Conformidades (Gera RNC)
                 </h4>
-                <p style="font-size:0.8rem; color:#777;">Os itens marcados como <strong>NC</strong> acima preenchem este campo automaticamente.</p>
-                <textarea id="obsVistoria" rows="6" style="width:100%; padding:15px; border:1px solid #c0392b; border-radius:8px; font-family: monospace;" placeholder="Descreva as não conformidades..."></textarea>
+                <p style="font-size:0.8rem; color:#777;">Os itens marcados como <strong>NC</strong> aparecem aqui automaticamente. Complete com detalhes se necessário.</p>
+                <textarea id="obsVistoria" rows="8" style="width:100%; padding:15px; border:1px solid #c0392b; border-radius:8px; font-family: monospace;" placeholder="As não conformidades aparecerão aqui..."></textarea>
                 
                 <div style="margin-top: 15px;">
-                    <label style="font-weight:bold;">Anexar PDF/Foto do Checklist:</label>
+                    <label style="font-weight:bold;">Anexar PDF/Foto do Checklist Assinado (Obrigatório):</label>
                     <input type="file" id="arquivoVistoria" accept=".pdf,image/*" required style="width:100%;">
                 </div>
             </div>
@@ -184,16 +235,17 @@
                 <div class="row">
                     <div class="form-group">
                         <label>Próxima Vistoria em:</label>
-                        <select id="prazoProxima" style="padding:8px; width:100%;">
+                        <select id="prazoProxima" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:4px;">
                             <option value="15">15 Dias</option>
                             <option value="30" selected>30 Dias</option>
                             <option value="60">60 Dias</option>
                             <option value="90">90 Dias</option>
+                            <option value="180">180 Dias</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Data Retorno:</label>
-                        <input type="date" id="dataProxima" readonly style="background:#e9ecef; cursor:not-allowed; width:100%;">
+                        <label>Data Retorno Calculada:</label>
+                        <input type="date" id="dataProxima" readonly style="background:#e9ecef; cursor:not-allowed; width:100%; border:1px solid #ddd; border-radius:4px;">
                     </div>
                 </div>
             </div>
@@ -216,10 +268,11 @@
     <script src="script.js"></script>
 
     <script>
-        // Gera botões para cada item
+        // Inicializa os botões em cada item do checklist
         document.querySelectorAll('.check-item').forEach(item => {
             const actions = document.createElement('div');
             actions.className = 'check-actions';
+            
             ['C', 'CR', 'NC', 'NA', 'NO'].forEach(opt => {
                 const btn = document.createElement('button');
                 btn.type = 'button';
@@ -229,31 +282,44 @@
                 btn.onclick = (e) => selectOption(e.target, item);
                 actions.appendChild(btn);
             });
+            
             item.appendChild(actions);
         });
 
+        // Função para abrir/fechar grupos (acordeão)
         function toggleGroup(header) {
             header.nextElementSibling.classList.toggle('open');
-            header.querySelector('i').classList.toggle('fa-chevron-down');
-            header.querySelector('i').classList.toggle('fa-chevron-up');
+            const icon = header.querySelector('i');
+            if(icon.classList.contains('fa-chevron-down')) {
+                icon.classList.replace('fa-chevron-down', 'fa-chevron-up');
+            } else {
+                icon.classList.replace('fa-chevron-up', 'fa-chevron-down');
+            }
         }
 
+        // Função de seleção de opção
         function selectOption(btn, rowItem) {
             rowItem.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             updateRNCText();
         }
 
+        // Atualiza o textarea automaticamente baseado nos NCs marcados
         function updateRNCText() {
             const ncItems = document.querySelectorAll('.opt-btn[data-val="NC"].active');
             let text = "";
-            let count = 1;
-            ncItems.forEach(btn => {
-                const row = btn.closest('.check-item');
-                const label = row.querySelector('.check-question').innerText;
-                text += `${count}. ${label} - [Descreva o detalhe];\n`;
-                count++;
-            });
+            
+            if (ncItems.length > 0) {
+                text += "NÃO CONFORMIDADES ENCONTRADAS:\n";
+                ncItems.forEach(btn => {
+                    const row = btn.closest('.check-item');
+                    // Pega o número e a pergunta
+                    const number = row.querySelector('.check-number').innerText;
+                    const question = row.querySelector('.check-question').childNodes[1].textContent;
+                    text += `${number} ${question}\n`;
+                });
+            }
+            
             document.getElementById('obsVistoria').value = text;
         }
     </script>

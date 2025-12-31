@@ -33,16 +33,15 @@ function carregarImagem(url) {
             ctx.drawImage(img, 0, 0);
             resolve(canvas.toDataURL('image/png'));
         };
-        img.onerror = () => { console.warn("Img Error ou não encontrada: " + url); resolve(null); }
+        img.onerror = () => { console.warn("Img Error: " + url); resolve(null); }
     });
 }
 
-// --- 1. ROTEAMENTO E AUTH ---
+// --- 1. ROTEAMENTO ---
 async function checkAuth() {
     const { data: { session } } = await _supabase.auth.getSession();
     const path = window.location.pathname;
     
-    // Ignora verificação na página pública de validação
     if (path.includes('verificacao.html')) return null;
 
     const isLoginPage = path.includes('index.html') || path.endsWith('/') || path.endsWith('/project-folder/');
@@ -57,7 +56,6 @@ async function checkAuth() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     const session = await checkAuth();
-    
     if (document.getElementById('loginForm')) setupLogin();
     
     if (session) {
@@ -66,41 +64,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (document.getElementById('produtoForm')) setupProdutosPage();
         if (document.getElementById('vistoriaForm')) setupVistoriasPage();
         
-        const userEmailEl = document.getElementById('userEmail');
-        if (userEmailEl) userEmailEl.textContent = session.user.email;
+        const userEl = document.getElementById('userEmail');
+        if(userEl) userEl.textContent = session.user.email;
         
         const logoutBtn = document.getElementById('logoutBtn');
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', async () => { 
-                await _supabase.auth.signOut(); 
-                window.location.href = 'index.html'; 
-            });
-        }
+        if(logoutBtn) logoutBtn.addEventListener('click', async () => { await _supabase.auth.signOut(); window.location.href = 'index.html'; });
     }
 });
 
 // --- 2. LOGIN ---
 function setupLogin() {
     const form = document.getElementById('loginForm');
-    if (!form) return;
-
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const msgDiv = document.getElementById('message');
-        if(msgDiv) msgDiv.textContent = "Verificando...";
+        if(msgDiv) msgDiv.textContent = "Conectando...";
         
         const { error } = await _supabase.auth.signInWithPassword({
             email: document.getElementById('email').value,
             password: document.getElementById('password').value
         });
-        if (error) { 
-            if(msgDiv) msgDiv.textContent = "";
-            Swal.fire({
-                icon: 'error',
-                title: 'Acesso Negado',
-                text: 'Email ou senha incorretos.',
-                confirmButtonColor: '#c0392b'
-            });
+        if (error) {
+             if(msgDiv) msgDiv.textContent = "";
+             Swal.fire('Erro', 'Credenciais inválidas', 'error');
         } else { 
             window.location.href = 'dashboard.html'; 
         }
@@ -486,7 +472,7 @@ window.gerarTitulo = async (id) => {
     }
 }
 
-// --- FUNÇÃO GLOBAL: RNC CONFORME MODELO DOCX (ATUALIZADA SEQUENCIAL) ---
+// --- FUNÇÃO GLOBAL: RNC CONFORME MODELO DOCX (ATUALIZADA SEQUENCIAL, ALINHADA E COM EDIÇÃO) ---
 window.gerarRNC = async (vistoriaId) => {
     try {
         // 1. Busca dados ANTES do popup
@@ -494,14 +480,15 @@ window.gerarRNC = async (vistoriaId) => {
         if(!v) throw new Error("Vistoria não encontrada");
         const { data: est } = await _supabase.from('estabelecimentos').select('*').eq('id', v.estabelecimento_id).single();
 
-        // Variáveis para armazenar as respostas dos 3 passos
+        // Variáveis para armazenar as respostas dos passos
         let embasamento, elementoInspecao;
+        let textoNCEditado;
         let textoLegalEditado;
         let respLegal, respTecnico, vet1, vet2;
 
         // --- PASSO 1: DADOS DA INFRAÇÃO ---
         const step1 = await Swal.fire({
-            title: 'Passo 1/3: Dados da Infração',
+            title: '1. Dados da Infração',
             html:
                 '<input id="swal-embasamento" class="swal2-input" placeholder="Embasamento Legal (Ex: Decreto 53.848/2017)">' +
                 '<input id="swal-elemento" class="swal2-input" placeholder="Elemento de Inspeção (Ex: Higiene Operacional)">',
@@ -518,30 +505,49 @@ window.gerarRNC = async (vistoriaId) => {
         [embasamento, elementoInspecao] = step1.value;
         if(!embasamento || !elementoInspecao) return Swal.fire('Erro', 'Preencha os campos obrigatórios.', 'warning');
 
-        // --- PASSO 2: TEXTO LEGAL (PLANO DE AÇÃO) ---
-        const textoPadrao = "A resposta do estabelecimento deverá ser formalizada em documento oficial da própria instituição, contendo a descrição detalhada das ações corretivas propostas para cada não conformidade apontada, com a indicação dos respectivos prazos para sua implementação. O documento deverá configurar um Plano de Ação, discriminando as medidas corretivas imediatas e o cronograma das ações subsequentes planejadas. O Plano de Ação deverá ser assinado pelos responsáveis técnicos e legais do estabelecimento e encaminhado ao serviço oficial digital, prazo máximo de 15 (quinze) dias úteis a partir do recebimento deste documento.";
+        // --- PASSO 2: REVISÃO DE NÃO CONFORMIDADES (NOVIDADE: EDIÇÃO) ---
+        // Pega o texto atual do banco ou usa "Sem não conformidades" se vazio
+        const textoOriginalNC = v.observacoes || "Nenhuma não conformidade registrada no checklist.";
         
         const step2 = await Swal.fire({
-            title: 'Passo 2/3: Texto do Plano de Ação',
+            title: '2. Revisar Não Conformidades',
+            text: 'Edite o texto abaixo para sair exatamente como deseja na RNC.',
+            input: 'textarea',
+            inputValue: textoOriginalNC,
+            inputAttributes: { style: 'height: 200px; font-size: 0.9rem; font-family: monospace;' },
+            confirmButtonText: 'Próximo',
+            showCancelButton: true
+        });
+        if (!step2.isConfirmed) return;
+        textoNCEditado = step2.value;
+
+        // Atualiza a RNC no banco com o texto editado (para ficar salvo)
+        if (textoNCEditado !== textoOriginalNC) {
+            await _supabase.from('vistorias').update({ observacoes: textoNCEditado }).eq('id', vistoriaId);
+        }
+
+        // --- PASSO 3: TEXTO LEGAL (PLANO DE AÇÃO) ---
+        const textoPadrao = "A resposta do estabelecimento deverá ser formalizada em documento oficial da própria instituição, contendo a descrição detalhada das ações corretivas propostas para cada não conformidade apontada, com a indicação dos respectivos prazos para sua implementação. O documento deverá configurar um Plano de Ação, discriminando as medidas corretivas imediatas e o cronograma das ações subsequentes planejadas. O Plano de Ação deverá ser assinado pelos responsáveis técnicos e legais do estabelecimento e encaminhado ao serviço oficial digital, prazo máximo de 15 (quinze) dias úteis a partir do recebimento deste documento.";
+        
+        const step3 = await Swal.fire({
+            title: '3. Plano de Ação',
             input: 'textarea',
             inputValue: textoPadrao,
             inputAttributes: { style: 'height: 150px; font-size: 0.9rem;' },
             confirmButtonText: 'Próximo'
         });
-        if (!step2.isConfirmed) return;
-        textoLegalEditado = step2.value;
+        if (!step3.isConfirmed) return;
+        textoLegalEditado = step3.value;
 
-        // --- PASSO 3: ASSINATURAS ---
-        const step3 = await Swal.fire({
-            title: 'Passo 3/3: Assinaturas',
-            width: '700px',
+        // --- PASSO 4: ASSINATURAS ---
+        const step4 = await Swal.fire({
+            title: '4. Assinaturas',
+            width: '600px',
             html:
-                '<div style="text-align:left; margin-bottom:10px; font-weight:bold;">Estabelecimento:</div>' +
-                '<div style="display:flex; gap:10px; margin-bottom:15px;">' +
-                    '<input id="swal-resp-legal" class="swal2-input" placeholder="Resp. Legal" style="margin:0;">' +
-                    '<input id="swal-resp-tecnico" class="swal2-input" placeholder="Resp. Técnico" value="' + (est.responsavel_tecnico || '') + '" style="margin:0;">' +
-                '</div>' +
-                '<div style="text-align:left; margin-bottom:10px; font-weight:bold;">Veterinários (Deixe o 2º em branco se houver apenas um):</div>' +
+                '<div style="text-align:left; font-weight:bold; margin-top:10px;">Estabelecimento:</div>' +
+                '<input id="swal-resp-legal" class="swal2-input" placeholder="Resp. Legal" style="margin:0;">' +
+                '<input id="swal-resp-tecnico" class="swal2-input" placeholder="Resp. Técnico" value="' + (est.responsavel_tecnico || '') + '" style="margin:0;">' +
+                '<div style="text-align:left; font-weight:bold; margin-top:10px;">Veterinários (Deixe o 2º em branco se houver apenas um):</div>' +
                 '<input id="swal-vet1" class="swal2-input" placeholder="Veterinário 1" value="James William Bet - CRMV RS 10776" style="margin-bottom:10px;">' +
                 '<input id="swal-vet2" class="swal2-input" placeholder="Veterinário 2 (Opcional)" value="Rejane Werenicz da Costa - CRMV-RS 6996">',
             focusConfirm: false,
@@ -555,8 +561,8 @@ window.gerarRNC = async (vistoriaId) => {
                 ]
             }
         });
-        if (!step3.isConfirmed) return;
-        [respLegal, respTecnico, vet1, vet2] = step3.value;
+        if (!step4.isConfirmed) return;
+        [respLegal, respTecnico, vet1, vet2] = step4.value;
 
         // --- GERAÇÃO DO PDF ---
         Swal.fire({ title: 'Gerando PDF...', didOpen: () => Swal.showLoading() });
@@ -577,25 +583,57 @@ window.gerarRNC = async (vistoriaId) => {
         const doc = new jsPDF(); 
         const centroX = 105;
 
-        // Cabeçalho EM CAIXA (Tabela)
+        // MARGEM PADRÃO PARA ALINHAMENTO
+        const commonMargin = { left: 10, right: 10 };
+
+        // --- CABEÇALHO PERSONALIZADO ---
         doc.autoTable({
             startY: 10,
             body: [
                 [
                     { content: '', styles: { cellWidth: 25 } }, 
-                    { content: 'GOVERNO DO ESTADO DO RIO GRANDE DO SUL\nPREFEITURA MUNICIPAL DE CAMAQUÃ\nSECRETARIA MUNICIPAL DE AGRICULTURA E ABASTECIMENTO\nSERVIÇO DE INSPEÇÃO MUNICIPAL', styles: { halign: 'center', valign: 'middle', fontStyle: 'bold', fontSize: 10 } },
+                    { content: '', styles: { cellWidth: 140 } }, // Célula central vazia (desenhada no hook)
                     { content: '', styles: { cellWidth: 25 } }
                 ]
             ],
             theme: 'plain',
-            styles: { lineColor: [0, 0, 0], lineWidth: 0.1, minCellHeight: 25 },
+            margin: commonMargin,
+            styles: { lineColor: [0, 0, 0], lineWidth: 0.1, minCellHeight: 28 },
             didDrawCell: (data) => {
+                // Desenha Logos e Texto
                 if (data.section === 'body' && data.row.index === 0) {
+                    // Logos nas laterais
                     if (data.column.index === 0 && logoCamaqua) {
-                         doc.addImage(logoCamaqua, 'PNG', data.cell.x + 2, data.cell.y + 2, 21, 21);
+                         doc.addImage(logoCamaqua, 'PNG', data.cell.x + 2, data.cell.y + 4, 21, 21);
                     }
                     if (data.column.index === 2 && logoSim) {
-                         doc.addImage(logoSim, 'PNG', data.cell.x + 2, data.cell.y + 2, 21, 21);
+                         doc.addImage(logoSim, 'PNG', data.cell.x + 2, data.cell.y + 4, 21, 21);
+                    }
+
+                    // Texto Central (Linha por Linha)
+                    if (data.column.index === 1) {
+                        const centerX = data.cell.x + (data.cell.width / 2);
+                        let currentY = data.cell.y + 6; // Padding top
+
+                        doc.setFontSize(9);
+                        
+                        // 1. Governo (Normal)
+                        doc.setFont("helvetica", "normal");
+                        doc.text("GOVERNO DO ESTADO DO RIO GRANDE DO SUL", centerX, currentY, { align: "center" });
+                        
+                        // 2. Prefeitura (Negrito)
+                        currentY += 5;
+                        doc.setFont("helvetica", "bold");
+                        doc.text("PREFEITURA MUNICIPAL DE CAMAQUÃ", centerX, currentY, { align: "center" });
+
+                        // 3. Secretaria (Normal)
+                        currentY += 5;
+                        doc.setFont("helvetica", "normal");
+                        doc.text("SECRETARIA MUNICIPAL DE AGRICULTURA E ABASTECIMENTO", centerX, currentY, { align: "center" });
+
+                        // 4. SIM (Normal)
+                        currentY += 5;
+                        doc.text("SERVIÇO DE INSPEÇÃO MUNICIPAL", centerX, currentY, { align: "center" });
                     }
                 }
             }
@@ -612,6 +650,7 @@ window.gerarRNC = async (vistoriaId) => {
             head:[['NÚMERO', 'SIM', 'DATA']], 
             body:[[`${num}/${ano}`, est.numero_sim || '---', formatarDataSemFuso(v.data_vistoria)]], 
             theme: 'plain', 
+            margin: commonMargin,
             styles: { fontSize: 10, halign: 'center', cellPadding: 2, lineColor: [0, 0, 0], lineWidth: 0.1 },
             headStyles: { fontStyle: 'bold', fillColor: [220, 220, 220] } 
         });
@@ -622,8 +661,9 @@ window.gerarRNC = async (vistoriaId) => {
                 [{ content: 'ESTABELECIMENTO:', styles: { fontStyle: 'bold', cellWidth: 40 } }, est.razao_social.toUpperCase()]
             ], 
             theme: 'plain',
+            margin: commonMargin,
             styles: { fontSize: 10, cellPadding: 2, lineColor: [0, 0, 0], lineWidth: 0.1 },
-            margin: { top: 2 } 
+            margin: { top: 2, ...commonMargin } 
         });
 
         // Tabela 3: Detalhes da Irregularidade
@@ -632,37 +672,33 @@ window.gerarRNC = async (vistoriaId) => {
                 [{ content: 'EMBASAMENTO LEGAL', styles: { fontStyle: 'bold', cellWidth: 60, fillColor: [220, 220, 220] } }, embasamento],
                 [{ content: 'ELEMENTO DE INSPEÇÃO', styles: { fontStyle: 'bold', fillColor: [220, 220, 220] } }, elementoInspecao],
                 [{ content: 'NÃO CONFORMIDADES ENCONTRADAS (Descrição e Ação Fiscal)', colSpan: 2, styles: { fontStyle: 'bold', halign: 'center', fillColor: [220, 220, 220] } }],
-                [{ content: v.observacoes || "Vide relatório anexo.", colSpan: 2, styles: { minCellHeight: 40 } }]
+                [{ content: textoNCEditado || "Vide anexo.", colSpan: 2, styles: { minCellHeight: 40 } }]
             ], 
             theme: 'plain', 
+            margin: commonMargin,
             styles: { fontSize: 10, cellPadding: 3, lineColor: [0, 0, 0], lineWidth: 0.1 },
-            margin: { top: 5 }
+            margin: { top: 5, ...commonMargin }
         });
 
-        // Tabela 4: Texto Legal (Notificação) em Caixa
+        // TÍTULO "DESCRIÇÃO DO DOCUMENTO" (NOVA CAIXA)
         doc.autoTable({
             startY: doc.lastAutoTable.finalY + 2,
-            body: [[ "Este documento é uma notificação por escrito da falha em atender às exigências regulamentares e pode resultar em adicional ação administrativa e legal. O estabelecimento deve cumprir as exigências elencadas." ]],
-            theme: 'plain',
-            styles: { fontSize: 9, cellPadding: 2, lineColor: [0, 0, 0], lineWidth: 0.1 }
-        });
-
-        // Tabela 5: Texto Plano de Ação em Caixa
-        doc.autoTable({
-            startY: doc.lastAutoTable.finalY + 2,
-            body: [[ textoLegalEditado ]],
-            theme: 'plain',
-            styles: { fontSize: 9, fontStyle: 'italic', cellPadding: 2, lineColor: [0, 0, 0], lineWidth: 0.1 }
+            head:[['DESCRIÇÃO DO DOCUMENTO']], 
+            body:[["Este documento é uma notificação por escrito da falha em atender às exigências regulamentares e pode resultar em adicional ação administrativa e legal. O estabelecimento deve cumprir as exigências elencadas."]], 
+            theme:'grid', margin:commonMargin, 
+            headStyles:{fillColor:220, textColor:0, halign:'center', fontStyle:'bold', lineColor:0, lineWidth:0.1},
+            styles:{fontSize:9, cellPadding:2, lineColor:0, lineWidth:0.1}
         });
 
         // 6. ASSINATURAS UNIFICADAS
         
         // Título "ASSINATURAS" com caixa cinza
         doc.autoTable({
-            startY: doc.lastAutoTable.finalY + 10,
+            startY: doc.lastAutoTable.finalY + 5,
             head: [['ASSINATURAS']],
             body: [], 
             theme: 'grid',
+            margin: commonMargin,
             headStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], halign: 'center', fontStyle: 'bold', lineColor: [0,0,0], lineWidth: 0.1 }
         });
 
@@ -672,21 +708,18 @@ window.gerarRNC = async (vistoriaId) => {
         const vet2Formatado = vet2 ? `\n\n___________________________\n${vet2}` : '';
 
         if (vet2 && vet2.trim() !== "") {
-            // Se tem 2 vets, cria duas células
             linhaVeterinarios = [
                 { content: vet1Formatado, styles: { halign: 'center', valign: 'bottom', cellPadding: 3 } },
                 { content: vet2Formatado, styles: { halign: 'center', valign: 'bottom', cellPadding: 3 } }
             ];
         } else {
-            // Se só tem 1 vet, cria uma célula que ocupa 2 colunas (colspan)
             linhaVeterinarios = [
                 { content: vet1Formatado, colSpan: 2, styles: { halign: 'center', valign: 'bottom', cellPadding: 3 } }
             ];
         }
 
-        // Labels dos Responsáveis
-        const lblLegal = respLegal ? `\n\n___________________________\n${respLegal.toUpperCase()}\nResponsável Legal` : '\n\n___________________________\nResponsável Legal';
-        const lblTecnico = respTecnico ? `\n\n___________________________\n${respTecnico.toUpperCase()}\nResponsável Técnico` : '\n\n___________________________\nResponsável Técnico';
+        const l1 = respLegal ? respLegal.toUpperCase() : "Responsável Legal";
+        const l2 = respTecnico ? respTecnico.toUpperCase() : "Responsável Técnico";
 
         // Grade de Assinaturas
         doc.autoTable({
@@ -694,14 +727,24 @@ window.gerarRNC = async (vistoriaId) => {
             body: [
                 linhaVeterinarios,
                 [
-                    { content: lblLegal, styles: { halign: 'center', valign: 'bottom', cellPadding: 3 } },
-                    { content: lblTecnico, styles: { halign: 'center', valign: 'bottom', cellPadding: 3 } }
+                    { content: `\n\n___________________________\n${l1}\nResponsável Legal`, styles: { halign: 'center', valign: 'bottom', cellPadding: 3 } },
+                    { content: `\n\n___________________________\n${l2}\nResponsável Técnico`, styles: { halign: 'center', valign: 'bottom', cellPadding: 3 } }
                 ]
             ],
             theme: 'grid',
+            margin: commonMargin,
             styles: { fontSize: 9, lineColor: [0, 0, 0], lineWidth: 0.1 },
-            columnStyles: { 0: { cellWidth: 95 }, 1: { cellWidth: 95 } },
-            margin: { left: 10 }
+            columnStyles: { 0: { cellWidth: 95 }, 1: { cellWidth: 95 } }
+        });
+
+        // TÍTULO "MEDIDAS A SEREM ADOTADAS..." (MOVIDO PARA O FINAL)
+        doc.autoTable({ 
+            startY: doc.lastAutoTable.finalY + 5,
+            head:[['MEDIDAS A SEREM ADOTADAS PELO ESTABELECIMENTO']], 
+            body:[[textoLegalEditado]], 
+            theme:'grid', margin:commonMargin, 
+            headStyles:{fillColor:220, textColor:0, halign:'center', fontStyle:'bold', lineColor:0, lineWidth:0.1},
+            styles:{fontSize:9, fontStyle:'italic', cellPadding:2, lineColor:0, lineWidth:0.1}
         });
 
         doc.save(`RNC_${num}_${ano}.pdf`);
@@ -713,82 +756,7 @@ window.gerarRNC = async (vistoriaId) => {
     }
 }
 
-// --- FUNÇÃO GLOBAL: EXCLUSÃO ---
-window.excluirEstabelecimento = async (id) => { 
-    const res = await Swal.fire({ title: 'Excluir?', text: 'Essa ação é irreversível.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' });
-    if(res.isConfirmed) { await _supabase.from('estabelecimentos').delete().eq('id', id); carregarEstabelecimentos(); Swal.fire('Excluído!', '', 'success'); } 
-};
-window.deletarItem = async (t, id) => { 
-    const res = await Swal.fire({ title: 'Apagar item?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' });
-    if(res.isConfirmed) { await _supabase.from(t).delete().eq('id', id); location.reload(); } 
-};
-
-// --- PÁGINAS ESPECÍFICAS (VISTORIAS, PRODUTOS, DOCS) ---
-
-// VISTORIAS
-async function setupVistoriasPage() {
-    const estId = new URLSearchParams(window.location.search).get('id');
-    if (!estId) { window.location.href = 'dashboard.html'; return; }
-    
-    const { data: est } = await _supabase.from('estabelecimentos').select('*').eq('id', estId).single();
-    if (est) document.getElementById('tituloEmpresa').textContent = est.nome_fantasia || est.razao_social;
-    
-    const inputData = document.getElementById('dataVistoria');
-    if (inputData) {
-        inputData.value = new Date().toISOString().split('T')[0];
-        const selectPrazo = document.getElementById('prazoProxima');
-        const inputDataProxima = document.getElementById('dataProxima');
-        
-        function calcularData() {
-            const dataBaseStr = inputData.value || new Date().toISOString().split('T')[0];
-            const dataBase = new Date(dataBaseStr + 'T00:00:00');
-            const dias = parseInt(selectPrazo.value);
-            dataBase.setDate(dataBase.getDate() + dias);
-            inputDataProxima.value = dataBase.toISOString().split('T')[0];
-        }
-        selectPrazo.addEventListener('change', calcularData);
-        inputData.addEventListener('change', calcularData);
-        calcularData();
-    }
-
-    document.getElementById('vistoriaForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const file = document.getElementById('arquivoVistoria').files[0];
-        if(!file) return Swal.fire('Erro', 'Selecione um arquivo PDF/Imagem', 'error');
-        
-        const nome = `vistoria_${estId}_${Date.now()}`;
-        const { error: upError } = await _supabase.storage.from('documentos-sim').upload(nome, file);
-        if (upError) return Swal.fire('Erro Upload', upError.message, 'error');
-
-        const url = _supabase.storage.from('documentos-sim').getPublicUrl(nome).data.publicUrl;
-        
-        await _supabase.from('vistorias').insert([{
-            estabelecimento_id: estId,
-            data_vistoria: inputData.value,
-            status: document.getElementById('statusVistoria').value,
-            observacoes: document.getElementById('obsVistoria').value,
-            dias_para_proxima: document.getElementById('prazoProxima').value,
-            data_proxima_vistoria: document.getElementById('dataProxima').value,
-            url_anexo: url
-        }]);
-        Swal.fire('Sucesso', 'Vistoria Salva!', 'success');
-        e.target.reset();
-        inputData.value = new Date().toISOString().split('T')[0];
-        carregarVistorias(estId);
-    });
-    carregarVistorias(estId);
-}
-
-async function carregarVistorias(id) {
-    const tbody = document.querySelector('#tabelaVistorias tbody'); 
-    if(!tbody) return;
-    tbody.innerHTML = '';
-    const { data } = await _supabase.from('vistorias').select('*').eq('estabelecimento_id', id).order('data_vistoria', {ascending:false});
-    data.forEach(v => {
-        const btnRNC = (v.status !== 'satisfatoria' && v.status !== 'conforme') ? `<button onclick="gerarRNC(${v.id})" style="background:#34495e; color:white; padding:5px; border:none; cursor:pointer; border-radius:3px;">RNC</button>` : '';
-        tbody.innerHTML += `<tr><td>${formatarDataSemFuso(v.data_vistoria)}</td><td>${v.status}</td><td><a href="${v.url_anexo}" target="_blank">Ver</a></td><td>${formatarDataSemFuso(v.data_proxima_vistoria)}</td><td>${btnRNC}</td></tr>`;
-    });
-}
+// --- FUNÇÕES DE OUTRAS PÁGINAS (COMPLETAS) ---
 
 // DOCUMENTOS
 async function setupDocumentosPage() {
@@ -837,4 +805,100 @@ async function carregarProdutos(id) {
     if(!tbody) return;
     tbody.innerHTML = '';
     data.forEach(p => tbody.innerHTML += `<tr><td>${p.numero_registro_produto}</td><td>${p.nome}</td><td>${p.marca}</td><td>${p.embalagem}</td><td><button onclick="deletarItem('produtos',${p.id})" style="color:red;border:none;">X</button></td></tr>`);
+}
+
+// --- FUNÇÕES GLOBAIS DE EXCLUSÃO ---
+window.excluirEstabelecimento = async (id) => { 
+    const res = await Swal.fire({ title: 'Excluir?', text: 'Essa ação é irreversível.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' });
+    if(res.isConfirmed) { await _supabase.from('estabelecimentos').delete().eq('id', id); carregarEstabelecimentos(); Swal.fire('Excluído!', '', 'success'); } 
+};
+window.deletarItem = async (t, id) => { 
+    const res = await Swal.fire({ title: 'Apagar item?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' });
+    if(res.isConfirmed) { await _supabase.from(t).delete().eq('id', id); location.reload(); } 
+};
+
+// --- VISTORIAS ---
+async function setupVistoriasPage() {
+    const estId = new URLSearchParams(window.location.search).get('id');
+    if (!estId) { window.location.href = 'dashboard.html'; return; }
+    
+    const { data: est } = await _supabase.from('estabelecimentos').select('*').eq('id', estId).single();
+    if (est) document.getElementById('tituloEmpresa').textContent = est.nome_fantasia || est.razao_social;
+    
+    const inputData = document.getElementById('dataVistoria');
+    inputData.value = new Date().toISOString().split('T')[0];
+    
+    const selectPrazo = document.getElementById('prazoProxima');
+    const inputDataProxima = document.getElementById('dataProxima');
+    function calcularData() {
+        const dataBase = new Date(inputData.value + 'T00:00:00');
+        dataBase.setDate(dataBase.getDate() + parseInt(selectPrazo.value));
+        inputDataProxima.value = dataBase.toISOString().split('T')[0];
+    }
+    selectPrazo.addEventListener('change', calcularData);
+    inputData.addEventListener('change', calcularData);
+    calcularData();
+
+    document.getElementById('vistoriaForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        // Verifica se a conclusão foi selecionada
+        const conclusaoEl = document.getElementById('conclusaoSelect');
+        if (!conclusaoEl) {
+            console.error('Elemento conclusaoSelect não encontrado.');
+            return Swal.fire('Erro', 'Formulário inválido. Recarregue a página.', 'error');
+        }
+
+        const conclusao = conclusaoEl.value;
+        let statusDB = 'satisfatoria';
+        if (conclusao === '7.2') statusDB = 'com_deficiencias';
+        if (conclusao === '7.3') statusDB = 'grave_deficiencia';
+
+        const file = document.getElementById('arquivoVistoria').files[0];
+        if(!file) return Swal.fire('Erro', 'Anexe o checklist assinado.', 'warning');
+
+        const nomeArquivo = `checklist_${estId}_${Date.now()}`;
+        const { error: upError } = await _supabase.storage.from('documentos-sim').upload(nomeArquivo, file);
+        if (upError) return Swal.fire('Erro Upload', upError.message, 'error');
+        
+        const url = _supabase.storage.from('documentos-sim').getPublicUrl(nomeArquivo).data.publicUrl;
+
+        await _supabase.from('vistorias').insert([{
+            estabelecimento_id: estId,
+            data_vistoria: inputData.value,
+            status: statusDB,
+            observacoes: document.getElementById('obsVistoria').value,
+            dias_para_proxima: selectPrazo.value,
+            data_proxima_vistoria: inputDataProxima.value,
+            url_anexo: url
+        }]);
+
+        Swal.fire('Sucesso', 'Vistoria Registrada!', 'success');
+        e.target.reset();
+        carregarVistorias(estId);
+    });
+    carregarVistorias(estId);
+}
+
+async function carregarVistorias(id) {
+    const tbody = document.querySelector('#tabelaVistorias tbody');
+    if(!tbody) return;
+    tbody.innerHTML = '';
+    
+    const { data } = await _supabase.from('vistorias').select('*').eq('estabelecimento_id', id).order('data_vistoria', {ascending:false});
+    
+    data.forEach(v => {
+        const precisaRNC = (v.status === 'com_deficiencias' || v.status === 'grave_deficiencia');
+        const btnRNC = precisaRNC 
+            ? `<button onclick="gerarRNC(${v.id})" style="background:#c0392b; color:white; padding:5px 10px; border:none; cursor:pointer; border-radius:4px; font-weight:bold;">Gerar RNC</button>` 
+            : '<span style="color:#27ae60; font-weight:bold;">-</span>';
+
+        tbody.innerHTML += `<tr>
+            <td>${formatarDataSemFuso(v.data_vistoria)}</td>
+            <td>${v.status.toUpperCase()}</td>
+            <td><a href="${v.url_anexo}" target="_blank">Ver Anexo</a></td>
+            <td>${formatarDataSemFuso(v.data_proxima_vistoria)}</td>
+            <td>${btnRNC}</td>
+        </tr>`;
+    });
 }
