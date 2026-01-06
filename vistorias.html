@@ -220,10 +220,10 @@
 
             <div class="card">
                 <h4 style="color:#c0392b; margin-top:0;">
-                    <i class="fas fa-exclamation-triangle"></i> Não Conformidades (Gera RNC)
+                    <i class="fas fa-exclamation-triangle"></i> Não Conformidades e Restrições
                 </h4>
-                <p style="font-size:0.8rem; color:#777;">Os itens marcados como <strong>NC</strong> aparecem aqui automaticamente. Complete com detalhes se necessário.</p>
-                <textarea id="obsVistoria" rows="8" style="width:100%; padding:15px; border:1px solid #c0392b; border-radius:8px; font-family: monospace;" placeholder="As não conformidades aparecerão aqui..."></textarea>
+                <p style="font-size:0.8rem; color:#777;">Itens marcados como <strong>NC</strong> (Não Conforme) e <strong>CR</strong> (Conforme com Restrição) aparecerão aqui.</p>
+                <textarea id="obsVistoria" rows="10" style="width:100%; padding:15px; border:1px solid #c0392b; border-radius:8px; font-family: monospace;" placeholder="Os apontamentos aparecerão aqui automaticamente..."></textarea>
                 
                 <div style="margin-top: 15px;">
                     <label style="font-weight:bold;">Anexar PDF/Foto do Checklist Assinado (Obrigatório):</label>
@@ -234,13 +234,20 @@
             <div class="card" style="background:#f8f9fa;">
                 <div class="row">
                     <div class="form-group">
-                        <label>Próxima Vistoria em:</label>
+                        <label>Prazo em Dias:</label>
                         <select id="prazoProxima" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:4px;">
                             <option value="15">15 Dias</option>
                             <option value="30" selected>30 Dias</option>
                             <option value="60">60 Dias</option>
                             <option value="90">90 Dias</option>
                             <option value="180">180 Dias</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Tipo de Contagem:</label>
+                        <select id="tipoContagem" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:4px;">
+                            <option value="corridos" selected>Dias Corridos (Padrão)</option>
+                            <option value="uteis">Dias Úteis</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -304,20 +311,38 @@
             updateRNCText();
         }
 
-        // Atualiza o textarea automaticamente baseado nos NCs marcados
+        // Atualiza o textarea automaticamente baseado nos NCs e CRs marcados
         function updateRNCText() {
-            const ncItems = document.querySelectorAll('.opt-btn[data-val="NC"].active');
+            // Seleciona botões ativos que sejam NC ou CR
+            const activeBtns = document.querySelectorAll('.opt-btn.active');
             let text = "";
             
-            if (ncItems.length > 0) {
-                text += "NÃO CONFORMIDADES ENCONTRADAS:\n";
-                ncItems.forEach(btn => {
+            let listaNC = [];
+            let listaCR = [];
+
+            activeBtns.forEach(btn => {
+                const val = btn.dataset.val;
+                if (val === 'NC' || val === 'CR') {
                     const row = btn.closest('.check-item');
-                    // Pega o número e a pergunta
                     const number = row.querySelector('.check-number').innerText;
-                    const question = row.querySelector('.check-question').childNodes[1].textContent;
-                    text += `${number} ${question}\n`;
-                });
+                    // Pega o texto da pergunta (nó de texto após o span do número)
+                    const questionNode = row.querySelector('.check-question').childNodes[1];
+                    const question = questionNode ? questionNode.textContent.trim() : "";
+                    
+                    if (val === 'NC') listaNC.push(`${number} ${question}`);
+                    if (val === 'CR') listaCR.push(`${number} ${question}`);
+                }
+            });
+
+            if (listaNC.length > 0) {
+                text += "NÃO CONFORMIDADES (NC):\n";
+                text += listaNC.join('\n') + "\n";
+            }
+
+            if (listaCR.length > 0) {
+                if (listaNC.length > 0) text += "\n"; // Quebra de linha se houver ambos
+                text += "CONFORMIDADES COM RESTRIÇÃO (CR):\n";
+                text += listaCR.join('\n') + "\n";
             }
             
             document.getElementById('obsVistoria').value = text;

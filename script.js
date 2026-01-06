@@ -20,6 +20,21 @@ function formatarDataSemFuso(dataString) {
     return `${dia}/${mes}/${ano}`;
 }
 
+// Função Auxiliar: Adicionar Dias Úteis (Ignora Sábado/Domingo)
+function adicionarDiasUteis(data, dias) {
+    let count = 0;
+    let novaData = new Date(data);
+    while (count < dias) {
+        novaData.setDate(novaData.getDate() + 1);
+        const diaSemana = novaData.getDay();
+        // 0 = Domingo, 6 = Sábado
+        if (diaSemana !== 0 && diaSemana !== 6) {
+            count++;
+        }
+    }
+    return novaData;
+}
+
 function carregarImagem(url) {
     return new Promise((resolve) => {
         const img = new Image();
@@ -829,13 +844,26 @@ async function setupVistoriasPage() {
     inputData.value = new Date().toISOString().split('T')[0];
     
     const selectPrazo = document.getElementById('prazoProxima');
+    const selectTipoContagem = document.getElementById('tipoContagem');
     const inputDataProxima = document.getElementById('dataProxima');
+
     function calcularData() {
+        const dias = parseInt(selectPrazo.value);
+        const tipo = selectTipoContagem.value; // 'corridos' ou 'uteis'
         const dataBase = new Date(inputData.value + 'T00:00:00');
-        dataBase.setDate(dataBase.getDate() + parseInt(selectPrazo.value));
-        inputDataProxima.value = dataBase.toISOString().split('T')[0];
+
+        if (tipo === 'uteis') {
+            const novaData = adicionarDiasUteis(dataBase, dias);
+            inputDataProxima.value = novaData.toISOString().split('T')[0];
+        } else {
+            // Dias corridos (padrão antigo)
+            dataBase.setDate(dataBase.getDate() + dias);
+            inputDataProxima.value = dataBase.toISOString().split('T')[0];
+        }
     }
+
     selectPrazo.addEventListener('change', calcularData);
+    selectTipoContagem.addEventListener('change', calcularData);
     inputData.addEventListener('change', calcularData);
     calcularData();
 
