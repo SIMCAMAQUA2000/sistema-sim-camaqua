@@ -21,6 +21,8 @@
         .card h3 { color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
         .btn-success { background: #27ae60; color: white; width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; font-size: 1.1rem; border:none; cursor:pointer; }
         .btn-primary { background: #2c3e50; color: white; padding: 8px 15px; border-radius: 5px; text-decoration: none; border:none; cursor:pointer; }
+        .btn-warning { background: #f39c12; color: white; }
+        .btn-danger { background: #c0392b; color: white; }
 
         /* ESTILOS DO CHECKLIST */
         .checklist-group { margin-bottom: 15px; border: 1px solid #bdc3c7; border-radius: 8px; overflow: hidden; }
@@ -80,8 +82,15 @@
         </div>
 
         <form id="vistoriaForm">
+            <input type="hidden" id="vistoriaId" value="">
+            <input type="hidden" id="urlAnexoAtual" value="">
+
             <div class="card mb-20">
-                <h3><i class="fas fa-calendar-alt"></i> Dados da Inspeção</h3>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3><i class="fas fa-calendar-alt"></i> Dados da Inspeção</h3>
+                    <button type="button" id="btnCancelarEdicao" style="display:none; background:#95a5a6; color:white; padding:5px 10px; font-size:0.8rem;">Cancelar Edição</button>
+                </div>
+                
                 <div class="row">
                     <div class="form-group">
                         <label>Data da Realização</label>
@@ -222,12 +231,15 @@
                 <h4 style="color:#c0392b; margin-top:0;">
                     <i class="fas fa-exclamation-triangle"></i> Não Conformidades e Restrições
                 </h4>
-                <p style="font-size:0.8rem; color:#777;">Itens marcados como <strong>NC</strong> (Não Conforme) e <strong>CR</strong> (Conforme com Restrição) aparecerão aqui.</p>
+                <p style="font-size:0.8rem; color:#777;">Itens marcados como <strong>NC</strong> e <strong>CR</strong> aparecerão aqui.</p>
                 <textarea id="obsVistoria" rows="10" style="width:100%; padding:15px; border:1px solid #c0392b; border-radius:8px; font-family: monospace;" placeholder="Os apontamentos aparecerão aqui automaticamente..."></textarea>
                 
                 <div style="margin-top: 15px;">
-                    <label style="font-weight:bold;">Anexar PDF/Foto do Checklist Assinado (Obrigatório):</label>
-                    <input type="file" id="arquivoVistoria" accept=".pdf,image/*" required style="width:100%;">
+                    <label style="font-weight:bold;">Anexar PDF/Foto do Checklist Assinado (Obrigatório se novo):</label>
+                    <input type="file" id="arquivoVistoria" accept=".pdf,image/*" style="width:100%;">
+                    <p id="linkAnexoAtual" style="font-size:0.8rem; display:none;">
+                        Arquivo atual: <a href="#" target="_blank">Ver</a>
+                    </p>
                 </div>
             </div>
 
@@ -257,7 +269,7 @@
                 </div>
             </div>
 
-            <button type="submit" class="btn-success"><i class="fas fa-save"></i> Salvar Vistoria</button>
+            <button type="submit" class="btn-success" id="btnSalvarVistoria"><i class="fas fa-save"></i> Salvar Vistoria</button>
         </form>
 
         <div class="card mt-20">
@@ -340,7 +352,7 @@
             }
 
             if (listaCR.length > 0) {
-                if (listaNC.length > 0) text += "\n"; // Quebra de linha se houver ambos
+                if (listaNC.length > 0) text += "\n"; 
                 text += "CONFORMIDADES COM RESTRIÇÃO (CR):\n";
                 text += listaCR.join('\n') + "\n";
             }

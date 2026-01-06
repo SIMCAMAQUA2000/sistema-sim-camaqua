@@ -278,7 +278,7 @@ async function carregarEstabelecimentos(busca = '') {
 
 // --- FUNÇÃO GLOBAL: FICHA CADASTRAL COMPLETA ---
 window.gerarFichaCompleta = async (id) => {
-    const confirmacao = await Swal.fire({
+     const confirmacao = await Swal.fire({
         title: 'Gerar Ficha?',
         text: "Deseja emitir o PDF completo com dados, produtos e QR Code?",
         icon: 'info',
@@ -297,7 +297,6 @@ window.gerarFichaCompleta = async (id) => {
         const [logoCamaqua, logoSim] = await Promise.all([ carregarImagem('./assets/brasao_camaqua.png'), carregarImagem('./assets/logo_sim.png') ]);
         const { jsPDF } = window.jspdf; const doc = new jsPDF();
         
-        // Header
         if (logoCamaqua) doc.addImage(logoCamaqua, 'PNG', 15, 10, 20, 20);
         if (logoSim) doc.addImage(logoSim, 'PNG', 175, 10, 20, 20);
         doc.setFontSize(10); doc.setTextColor(0);
@@ -376,7 +375,6 @@ window.gerarFichaCompleta = async (id) => {
             });
         }
 
-        // QR CODE NO RODAPÉ
         const currentPath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
         const baseUrl = window.location.origin + currentPath + '/verificacao.html';
         const linkValidacao = `${baseUrl}?nome=${encodeURIComponent(est.razao_social)}&cnpj=${encodeURIComponent(est.cnpj_cpf)}&sim=${encodeURIComponent(est.numero_sim)}&status=${encodeURIComponent(est.status)}`;
@@ -408,7 +406,7 @@ window.gerarFichaCompleta = async (id) => {
     }
 }
 
-// --- FUNÇÃO GLOBAL: TÍTULO DE REGISTRO ---
+// --- FUNÇÃO GLOBAL: TÍTULO DE REGISTRO (CORRIGIDA) ---
 window.gerarTitulo = async (id) => {
     const { value: portaria } = await Swal.fire({
         title: 'Gerar Título',
@@ -437,6 +435,7 @@ window.gerarTitulo = async (id) => {
         const height = doc.internal.pageSize.getHeight();
         const centroX = width / 2;
 
+        // Borda Decorativa
         doc.setLineWidth(1.5); doc.setDrawColor(44, 62, 80); doc.rect(10, 10, width - 20, height - 20);
         doc.setLineWidth(0.5); doc.rect(12, 12, width - 24, height - 24);
 
@@ -464,18 +463,35 @@ window.gerarTitulo = async (id) => {
         const linha4Y = startY + (gap * 3); doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(100); doc.text("LOGRADOURO / LOCALIZAÇÃO", 30, linha4Y);
         doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(0); doc.text(`${est.endereco}, ${est.municipio} - CEP: ${est.cep || ""}`.toUpperCase(), 30, linha4Y + 5);
 
-        // QR CODE COM LINK
+        // --- CORREÇÃO DO QR CODE ---
         const currentPath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
-        const baseUrl = window.location.origin + currentPath + '/verificacao.html';
+        // Garante que não haja barras duplas (ex: origin//verificacao)
+        const baseUrl = (window.location.origin + currentPath + '/verificacao.html').replace(/([^:]\/)\/+/g, "$1");
+        
         const linkValidacao = `${baseUrl}?nome=${encodeURIComponent(est.razao_social)}&cnpj=${encodeURIComponent(est.cnpj_cpf)}&sim=${encodeURIComponent(est.numero_sim)}&status=${encodeURIComponent(est.status)}`;
 
-        try { const qrData = await QRCode.toDataURL(linkValidacao); doc.addImage(qrData, 'PNG', 20, 160, 25, 25); } catch(e) {}
+        try { 
+            // Aumenta qualidade e margem do QR Code
+            const qrData = await QRCode.toDataURL(linkValidacao, { width: 300, margin: 1, errorCorrectionLevel: 'M' });
+            
+            // Posiciona no canto inferior esquerdo, mas acima da margem
+            doc.addImage(qrData, 'PNG', 20, 155, 30, 30);
+            
+            // Adiciona Legenda Explicativa
+            doc.setFontSize(8);
+            doc.setTextColor(44, 62, 80);
+            doc.text("Valide a autenticidade", 35, 188, { align: "center" });
+
+        } catch(e) { 
+            console.error("Erro ao gerar QR Code:", e); 
+        }
 
         const hoje = new Date();
         const dataExtenso = hoje.toLocaleDateString('pt-BR', {year:'numeric', month:'long', day:'numeric'});
         const yAssinatura = 175;
 
-        doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.text(`Camaquã - RS, ${dataExtenso}`, centroX, yAssinatura - 15, { align: "center" });
+        doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(0);
+        doc.text(`Camaquã - RS, ${dataExtenso}`, centroX, yAssinatura - 15, { align: "center" });
         doc.setDrawColor(0); doc.setLineWidth(0.5); doc.line(centroX - 70, yAssinatura, centroX + 70, yAssinatura); 
         doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text("COORDENADOR DO SERVIÇO DE INSPEÇÃO MUNICIPAL", centroX, yAssinatura + 5, { align: "center" });
         doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.text(portaria, centroX, yAssinatura + 10, { align: "center" });
@@ -847,6 +863,12 @@ async function setupVistoriasPage() {
     const selectTipoContagem = document.getElementById('tipoContagem');
     const inputDataProxima = document.getElementById('dataProxima');
 
+    // Botão Cancelar Edição (se existir no HTML)
+    const btnCancelar = document.getElementById('btnCancelarEdicao');
+    if(btnCancelar) {
+        btnCancelar.addEventListener('click', () => { location.reload(); });
+    }
+
     function calcularData() {
         const dias = parseInt(selectPrazo.value);
         const tipo = selectTipoContagem.value; // 'corridos' ou 'uteis'
@@ -870,7 +892,9 @@ async function setupVistoriasPage() {
     document.getElementById('vistoriaForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         
-        // Verifica se a conclusão foi selecionada
+        // ID para Edição (se existir)
+        const vistoriaId = document.getElementById('vistoriaId') ? document.getElementById('vistoriaId').value : null;
+
         const conclusaoEl = document.getElementById('conclusaoSelect');
         if (!conclusaoEl) {
             console.error('Elemento conclusaoSelect não encontrado.');
@@ -882,30 +906,134 @@ async function setupVistoriasPage() {
         if (conclusao === '7.2') statusDB = 'com_deficiencias';
         if (conclusao === '7.3') statusDB = 'grave_deficiencia';
 
-        const file = document.getElementById('arquivoVistoria').files[0];
-        if(!file) return Swal.fire('Erro', 'Anexe o checklist assinado.', 'warning');
+        // CAPTURA DO CHECKLIST (NOVO)
+        const checklistJson = {};
+        document.querySelectorAll('.check-item').forEach(item => {
+            const num = item.querySelector('.check-number').innerText;
+            const activeBtn = item.querySelector('.opt-btn.active');
+            if(activeBtn) {
+                checklistJson[num] = activeBtn.dataset.val;
+            }
+        });
 
-        const nomeArquivo = `checklist_${estId}_${Date.now()}`;
-        const { error: upError } = await _supabase.storage.from('documentos-sim').upload(nomeArquivo, file);
-        if (upError) return Swal.fire('Erro Upload', upError.message, 'error');
+        // Upload
+        const fileInput = document.getElementById('arquivoVistoria');
+        const file = fileInput.files[0];
+        let url = "";
         
-        const url = _supabase.storage.from('documentos-sim').getPublicUrl(nomeArquivo).data.publicUrl;
+        // Se estiver editando, tenta pegar a URL antiga
+        if (vistoriaId && document.getElementById('urlAnexoAtual')) {
+            url = document.getElementById('urlAnexoAtual').value;
+        }
 
-        await _supabase.from('vistorias').insert([{
+        // Se não tem ID e não tem arquivo, bloqueia (Novo registro)
+        if (!vistoriaId && !file) {
+             return Swal.fire('Erro', 'Anexe o checklist assinado.', 'warning');
+        }
+
+        if (file) {
+            const nomeArquivo = `checklist_${estId}_${Date.now()}`;
+            const { error: upError } = await _supabase.storage.from('documentos-sim').upload(nomeArquivo, file);
+            if (upError) return Swal.fire('Erro Upload', upError.message, 'error');
+            url = _supabase.storage.from('documentos-sim').getPublicUrl(nomeArquivo).data.publicUrl;
+        }
+
+        const dadosSalvar = {
             estabelecimento_id: estId,
             data_vistoria: inputData.value,
             status: statusDB,
             observacoes: document.getElementById('obsVistoria').value,
             dias_para_proxima: selectPrazo.value,
             data_proxima_vistoria: inputDataProxima.value,
-            url_anexo: url
-        }]);
+            url_anexo: url,
+            checklist_data: checklistJson // SALVA O JSON
+        };
+
+        let erroOp;
+        if (vistoriaId) {
+            // UPDATE
+            const { error } = await _supabase.from('vistorias').update(dadosSalvar).eq('id', vistoriaId);
+            erroOp = error;
+        } else {
+            // INSERT
+            const { error } = await _supabase.from('vistorias').insert([dadosSalvar]);
+            erroOp = error;
+        }
+
+        if(erroOp) return Swal.fire('Erro', erroOp.message, 'error');
 
         Swal.fire('Sucesso', 'Vistoria Registrada!', 'success');
+        
+        // Limpeza Pós-Salvar
         e.target.reset();
+        document.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('active'));
+        if(document.getElementById('vistoriaId')) document.getElementById('vistoriaId').value = "";
+        if(document.getElementById('urlAnexoAtual')) document.getElementById('urlAnexoAtual').value = "";
+        if(document.getElementById('linkAnexoAtual')) document.getElementById('linkAnexoAtual').style.display = 'none';
+        if(document.getElementById('btnSalvarVistoria')) document.getElementById('btnSalvarVistoria').innerHTML = '<i class="fas fa-save"></i> Salvar Vistoria';
+        if(btnCancelar) btnCancelar.style.display = 'none';
+
         carregarVistorias(estId);
     });
     carregarVistorias(estId);
+}
+
+// NOVA FUNÇÃO: EDITAR VISTORIA
+window.editarVistoria = async (id) => {
+    const { data: v } = await _supabase.from('vistorias').select('*').eq('id', id).single();
+    if(!v) return;
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Preencher campos básicos
+    document.getElementById('vistoriaId').value = v.id;
+    document.getElementById('dataVistoria').value = v.data_vistoria;
+    
+    let conclusao = "7.1";
+    if(v.status === 'com_deficiencias') conclusao = "7.2";
+    if(v.status === 'grave_deficiencia') conclusao = "7.3";
+    document.getElementById('conclusaoSelect').value = conclusao;
+
+    document.getElementById('obsVistoria').value = v.observacoes;
+    document.getElementById('prazoProxima').value = v.dias_para_proxima;
+    document.getElementById('dataProxima').value = v.data_proxima_vistoria;
+    
+    // Anexo
+    if(v.url_anexo) {
+        document.getElementById('urlAnexoAtual').value = v.url_anexo;
+        const linkDiv = document.getElementById('linkAnexoAtual');
+        linkDiv.style.display = 'block';
+        linkDiv.querySelector('a').href = v.url_anexo;
+    }
+
+    // UI
+    document.getElementById('btnSalvarVistoria').innerHTML = '<i class="fas fa-sync"></i> Atualizar Vistoria';
+    document.getElementById('btnCancelarEdicao').style.display = 'block';
+
+    // RESTAURAR CHECKLIST
+    document.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('active'));
+    
+    if (v.checklist_data) {
+        const json = v.checklist_data;
+        document.querySelectorAll('.check-item').forEach(item => {
+            const num = item.querySelector('.check-number').innerText;
+            if (json[num]) {
+                const btnToClick = item.querySelector(`.opt-btn[data-val="${json[num]}"]`);
+                if(btnToClick) btnToClick.classList.add('active');
+            }
+        });
+    }
+}
+
+// NOVA FUNÇÃO: EXCLUIR VISTORIA
+window.excluirVistoria = async (id) => {
+    const res = await Swal.fire({ title: 'Excluir Vistoria?', text: 'Isso não pode ser desfeito.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' });
+    if(res.isConfirmed) {
+        await _supabase.from('vistorias').delete().eq('id', id);
+        const estId = new URLSearchParams(window.location.search).get('id');
+        carregarVistorias(estId);
+        Swal.fire('Excluído', '', 'success');
+    }
 }
 
 async function carregarVistorias(id) {
@@ -918,15 +1046,60 @@ async function carregarVistorias(id) {
     data.forEach(v => {
         const precisaRNC = (v.status === 'com_deficiencias' || v.status === 'grave_deficiencia');
         const btnRNC = precisaRNC 
-            ? `<button onclick="gerarRNC(${v.id})" style="background:#c0392b; color:white; padding:5px 10px; border:none; cursor:pointer; border-radius:4px; font-weight:bold;">Gerar RNC</button>` 
+            ? `<button onclick="gerarRNC(${v.id})" style="background:#c0392b; color:white; padding:5px 10px; border:none; cursor:pointer; border-radius:4px; font-weight:bold; font-size: 0.8rem;">RNC</button>` 
             : '<span style="color:#27ae60; font-weight:bold;">-</span>';
 
         tbody.innerHTML += `<tr>
             <td>${formatarDataSemFuso(v.data_vistoria)}</td>
             <td>${v.status.toUpperCase()}</td>
-            <td><a href="${v.url_anexo}" target="_blank">Ver Anexo</a></td>
+            <td><a href="${v.url_anexo}" target="_blank">Anexo</a></td>
             <td>${formatarDataSemFuso(v.data_proxima_vistoria)}</td>
-            <td>${btnRNC}</td>
+            <td>
+                <div style="display:flex; gap:5px;">
+                    ${btnRNC}
+                    <button onclick="editarVistoria(${v.id})" class="btn-warning" style="background:#f39c12; color:white; padding:5px; border:none; cursor:pointer; border-radius:4px;" title="Editar"><i class="fas fa-edit"></i></button>
+                    <button onclick="excluirVistoria(${v.id})" class="btn-danger" style="background:#c0392b; color:white; padding:5px; border:none; cursor:pointer; border-radius:4px;" title="Excluir"><i class="fas fa-trash"></i></button>
+                </div>
+            </td>
         </tr>`;
     });
 }
+
+// --- NOVA FUNÇÃO: BACKUP COMPLETO DO SISTEMA ---
+window.realizarBackupSistema = async () => {
+    try {
+        Swal.fire({ title: 'Gerando Backup...', text: 'Aguarde enquanto os dados são baixados.', didOpen: () => Swal.showLoading() });
+
+        const [est, prod, docs, vist] = await Promise.all([
+            _supabase.from('estabelecimentos').select('*'),
+            _supabase.from('produtos').select('*'),
+            _supabase.from('documentos').select('*'),
+            _supabase.from('vistorias').select('*')
+        ]);
+
+        const dadosBackup = {
+            data_backup: new Date().toISOString(),
+            estabelecimentos: est.data || [],
+            produtos: prod.data || [],
+            documentos: docs.data || [],
+            vistorias: vist.data || []
+        };
+
+        const jsonString = JSON.stringify(dadosBackup, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `BACKUP_SIM_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        Swal.fire('Sucesso', 'Arquivo de backup salvo no seu computador.', 'success');
+
+    } catch (err) {
+        console.error(err);
+        Swal.fire('Erro', 'Falha ao gerar backup.', 'error');
+    }
+};
