@@ -5,7 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestão de Documentos - SIM</title>
     <link rel="stylesheet" href="style.css">
+    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
@@ -75,10 +82,10 @@
                     </div>
                     <div class="form-group">
                         <label>Selecionar Arquivo (PDF ou Imagem)</label>
-                        <input type="file" id="arquivoInput" accept=".pdf, .jpg, .jpeg, .png" required>
+                        <input type="file" id="arquivoInput" accept=".pdf, .jpg, .jpeg, .png" required style="padding: 8px; width: 100%; border: 1px solid #ddd; background-color: #fff;">
                     </div>
                 </div>
-                <button type="submit" class="btn-success" id="btnUpload">
+                <button type="submit" class="btn-success" id="btnUpload" style="padding: 10px 20px; font-weight: bold; cursor: pointer; border: none; border-radius: 4px; background-color: #27ae60; color: white;">
                     <i class="fas fa-paperclip"></i> Enviar Arquivo
                 </button>
                 <p id="uploadStatus" style="margin-top: 10px; font-weight: bold;"></p>
@@ -86,7 +93,13 @@
         </div>
 
         <div class="card">
-            <h3><i class="fas fa-file-alt"></i> Arquivos Anexados</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                <h3 style="margin: 0;"><i class="fas fa-file-alt"></i> Arquivos Anexados</h3>
+                <button onclick="gerarPDFListaDocumentos()" class="btn-primary" style="background-color: #c0392b; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                    <i class="fas fa-file-pdf"></i> Gerar PDF da Lista
+                </button>
+            </div>
+            
             <div class="table-responsive">
                 <table id="tabelaDocumentos">
                     <thead>
@@ -98,11 +111,13 @@
                         </tr>
                     </thead>
                     <tbody>
-                        </tbody>
+                        <tr><td colspan="4" style="text-align:center;">Carregando...</td></tr>
+                    </tbody>
                 </table>
             </div>
         </div>
     </div>
+    
     <script src="config.js"></script>
     <script src="script.js"></script>
 </body>

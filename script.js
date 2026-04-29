@@ -1103,3 +1103,139 @@ window.realizarBackupSistema = async () => {
         Swal.fire('Erro', 'Falha ao gerar backup.', 'error');
     }
 };
+// --- FUNÇÃO: GERAR DOSSIÊ VISUAL COMPLETO (COM CONTEÚDO DOS ANEXOS) ---
+window.gerarPDFListaDocumentos = async () => {
+    const estId = new URLSearchParams(window.location.search).get('id');
+    if (!estId) return Swal.fire('Erro', 'Estabelecimento não encontrado.', 'error');
+
+    try {
+        Swal.fire({ 
+            title: 'Gerando Dossiê Visual...', 
+            text: 'Isso pode demorar dependendo da quantidade e tamanho dos anexos. Aguarde.', 
+            allowOutsideClick: false, 
+            didOpen: () => Swal.showLoading() 
+        });
+
+        // 1. Busca dados
+        const { data: est } = await _supabase.from('estabelecimentos').select('*').eq('id', estId).single();
+        const { data: docs } = await _supabase.from('documentos').select('*').eq('estabelecimento_id', estId).order('created_at', { ascending: false });
+
+        const [logoCamaqua, logoSim] = await Promise.all([
+            carregarImagem('./assets/brasao_camaqua.png'), 
+            carregarImagem('./assets/logo_sim.png')
+        ]);
+
+        const { jsPDF } = window.jspdf; 
+        const doc = new jsPDF('p', 'mm', 'a4');
+        const commonMargin = { left: 10, right: 10 };
+
+        // --- PÁGINA 1: CAPA E LISTAGEM ---
+        
+        // Cabeçalho Oficial
+        doc.autoTable({
+            startY: 10,
+            body: [[{ content: '', styles: { cellWidth: 25 } }, { content: '', styles: { cellWidth: 140 } }, { content: '', styles: { cellWidth: 25 } }]],
+            theme: 'plain',
+            margin: commonMargin,
+            styles: { lineColor: [0, 0, 0], lineWidth: 0.1, minCellHeight: 28 },
+            didDrawCell: (data) => {
+                if (data.section === 'body' && data.row.index === 0) {
+                    if (data.column.index === 0 && logoCamaqua) doc.addImage(logoCamaqua, 'PNG', data.cell.x + 2, data.cell.y + 4, 21, 21);
+                    if (data.column.index === 2 && logoSim) doc.addImage(logoSim, 'PNG', data.cell.x + 2, data.cell.y + 4, 21, 21);
+                    if (data.column.index === 1) {
+                        const centerX = data.cell.x + (data.cell.width / 2);
+                        let cY = data.cell.y + 6;
+                        doc.setFontSize(9).setFont("helvetica", "normal").text("GOVERNO DO ESTADO DO RIO GRANDE DO SUL", centerX, cY, { align: "center" });
+                        doc.setFont("helvetica", "bold").text("PREFEITURA MUNICIPAL DE CAMAQUÃ", centerX, cY += 5, { align: "center" });
+                        doc.setFont("helvetica", "normal").text("SECRETARIA MUNICIPAL DE AGRICULTURA E ABASTECIMENTO", centerX, cY += 5, { align: "center" });
+                        doc.text("SERVIÇO DE INSPEÇÃO MUNICIPAL", centerX, cY += 5, { align: "center" });
+                    }
+                }
+            }
+        });
+
+        doc.setFontSize(16).setFont("helvetica", "bold");
+        doc.text(`Documentos do estabelecimento ${est.razao_social}`, 105, doc.lastAutoTable.finalY + 15, { align: "center" });
+        
+        doc.setFontSize(10).setFont("helvetica", "normal");
+        doc.text(`CNPJ: ${est.cnpj_cpf}  |  Nº SIM: ${est.numero_sim}`, 105, doc.lastAutoTable.finalY + 22, { align: "center" });
+
+        // Tabela de Índice
+        doc.autoTable({
+            startY: doc.lastAutoTable.finalY + 30,
+            head: [['DATA', 'TIPO DE DOCUMENTO', 'NOME DO ARQUIVO']],
+            body: docs.map(d => [formatarDataSemFuso(d.created_at), d.tipo_documento, d.nome_arquivo]),
+            theme: 'grid',
+            headStyles: { fillColor: [44, 62, 80] },
+            styles: { fontSize: 9 }
+        });
+
+        // --- PROCESSAMENTO DOS ANEXOS (IMAGENS E PDFS) ---
+        
+        // Configura o PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        for (const d of docs) {
+            if (!d.url_arquivo) continue;
+
+            // Nova página para cada documento
+            doc.addPage();
+            
+            // Título do Anexo no topo da página
+            doc.setFillColor(240, 240, 240);
+            doc.rect(10, 10, 190, 10, 'F');
+            doc.setFontSize(10).setFont("helvetica", "bold").setTextColor(50);
+            doc.text(`ANEXO: ${d.tipo_documento.toUpperCase()} (${d.nome_arquivo})`, 15, 16.5);
+            doc.setTextColor(0);
+
+            const extensao = d.url_arquivo.split('?')[0].split('.').pop().toLowerCase();
+
+            try {
+                if (extensao === 'pdf') {
+                    // Lógica para converter PDF em Imagem (Página por Página)
+                    const loadingTask = pdfjsLib.getDocument(d.url_arquivo);
+                    const pdf = await loadingTask.promise;
+                    
+                    for (let n = 1; n <= pdf.numPages; n++) {
+                        if (n > 1) {
+                            doc.addPage();
+                            // Repete o título em páginas subsequentes do mesmo PDF
+                            doc.setFontSize(8).text(`(Continuação: ${d.nome_arquivo} - Pág ${n})`, 105, 8, {align: 'center'});
+                        }
+
+                        const page = await pdf.getPage(n);
+                        const viewport = page.getViewport({ scale: 2.0 });
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+
+                        await page.render({ canvasContext: context, viewport: viewport }).promise;
+                        const imgData = canvas.toDataURL('image/jpeg', 0.8);
+                        
+                        // Ajusta a imagem para caber na folha A4 (deixando margens)
+                        doc.addImage(imgData, 'JPEG', 10, 25, 190, 260, undefined, 'FAST');
+                    }
+                } else {
+                    // Lógica para Imagens Diretas (JPG, PNG)
+                    const imgData = await carregarImagem(d.url_arquivo);
+                    if (imgData) {
+                        doc.addImage(imgData, 'PNG', 10, 25, 190, 260, undefined, 'FAST');
+                    }
+                }
+            } catch (err) {
+                doc.setTextColor(200, 0, 0);
+                doc.text(`ERRO AO CARREGAR ESTE ARQUIVO: ${d.nome_arquivo}`, 20, 50);
+                doc.setTextColor(0);
+                console.error("Erro no anexo:", err);
+            }
+        }
+
+        doc.save(`Dossie_Visual_${est.numero_sim}.pdf`);
+        Swal.fire('Sucesso!', 'Dossiê gerado com todos os anexos visíveis.', 'success');
+
+    } catch (error) {
+        console.error(error);
+        Swal.fire('Erro', 'Ocorreu um erro ao processar os arquivos visuais.', 'error');
+    }
+};
