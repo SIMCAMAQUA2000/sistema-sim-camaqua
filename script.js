@@ -1292,14 +1292,44 @@ async function notificarEmpresa(vistoriaId) {
         `;
         const plain_text = `Prezado(a),\n\nSegue notificação formal referente ao estabelecimento ${est.razao_social} (SIM ${est.numero_sim || '---'}).\n\nRNC Assinado: ${rncUrl}\nRelatório de Vistoria: ${reportUrl}\n\nIMPORTANTE: Para assinatura digital do documento RNC, acesse: https://assinador.iti.gov.br/\n\nSolicitamos que o estabelecimento responda formalmente com o plano de ação dentro do prazo estabelecido.\n\nAtenciosamente,\nServiço de Inspeção Municipal - SIM Camaquã`;
 
-        // Preparar anexos a partir da URL pública do RNC
-        let attachmentUrls = [];
-        if (rncUrl && rncUrl.startsWith('http')) {
-            attachmentUrls.push({
-                filename: `RNC_Assinado_${est.razao_social.replace(/[^a-zA-Z0-9\s]/g, '_').replace(/\s+/g, '_')}.pdf`,
-                url: rncUrl,
-                contentType: 'application/pdf'
+        const fileRNC = document.getElementById('arquivoRNCAssinado').files[0];
+        let attachments = [];
+
+        async function blobToBase64(blob) {
+            return await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
             });
+        }
+
+        if (fileRNC) {
+            const base64 = await blobToBase64(fileRNC);
+            attachments.push({
+                filename: fileRNC.name || `RNC_Assinado_${est.razao_social.replace(/[^a-zA-Z0-9\s]/g, '_').replace(/\s+/g, '_')}.pdf`,
+                content: base64,
+                contentType: fileRNC.type || 'application/pdf',
+                encoding: 'base64'
+            });
+        } else if (rncUrl && rncUrl.startsWith('http')) {
+            try {
+                const rncResponse = await fetch(rncUrl);
+                if (rncResponse.ok) {
+                    const rncBlob = await rncResponse.blob();
+                    const base64 = await blobToBase64(rncBlob);
+                    attachments.push({
+                        filename: `RNC_Assinado_${est.razao_social.replace(/[^a-zA-Z0-9\s]/g, '_').replace(/\s+/g, '_')}.pdf`,
+                        content: base64,
+                        contentType: 'application/pdf',
+                        encoding: 'base64'
+                    });
+                } else {
+                    console.warn('Falha ao buscar o RNC para anexo:', rncResponse.status);
+                }
+            } catch (error) {
+                console.warn('Erro ao buscar o RNC para anexo:', error);
+            }
         }
 
         const response = await fetch(getNetlifyFunctionUrl('send-email'), {
@@ -1311,7 +1341,7 @@ async function notificarEmpresa(vistoriaId) {
                 subject,
                 html,
                 plain_text,
-                attachmentUrls,
+                attachments,
             })
         });
 
