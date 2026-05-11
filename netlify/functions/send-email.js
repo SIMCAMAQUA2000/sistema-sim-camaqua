@@ -23,9 +23,9 @@ exports.handler = async function(event, context) {
     };
   }
 
-  const GMAIL_USER = process.env.GMAIL_USER;
-  const GMAIL_PASS = process.env.GMAIL_PASS;
-  const FROM_NAME = process.env.GMAIL_FROM_NAME || 'SIM Camaquã';
+  const GMAIL_USER = process.env.GMAIL_USER || 'sim.agricultura.camaqua.rs@gmail.com';
+  const GMAIL_PASS = process.env.GMAIL_PASS || 'zyctscuibqehkpgu';
+  const FROM_NAME = process.env.GMAIL_FROM_NAME || 'SIM-CAMAQUA';
 
   if (!GMAIL_USER || !GMAIL_PASS) {
     return {
