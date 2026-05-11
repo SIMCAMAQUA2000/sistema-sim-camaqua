@@ -272,6 +272,61 @@
             <button type="submit" class="btn-success" id="btnSalvarVistoria"><i class="fas fa-save"></i> Salvar Vistoria</button>
         </form>
 
+        <!-- SEÇÃO DE ACOMPANHAMENTO DE PROCESSO -->
+        <div id="secaoProcesso" class="card mt-20" style="display:none; border-left: 5px solid #e74c3c;">
+            <h3><i class="fas fa-tasks"></i> Acompanhamento de Processo</h3>
+            
+            <div class="row">
+                <div class="form-group">
+                    <label>Status do Processo:</label>
+                    <select id="statusProcesso" style="padding:8px; width:100%; border:1px solid #ddd; border-radius:4px;">
+                        <option value="pendente">Pendente</option>
+                        <option value="rnc_gerado">RNC Gerado</option>
+                        <option value="notificado">Empresa Notificada</option>
+                        <option value="plano_recebido">Plano de Ação Recebido</option>
+                        <option value="itens_cadastrados">Itens Cadastrados</option>
+                        <option value="concluido">Concluído</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="secaoRNCAssinado" style="margin-top: 15px; display: none;">
+                <label style="font-weight:bold;">Anexar RNC Assinado (após assinaturas IPM):</label>
+                <input type="file" id="arquivoRNCAssinado" accept=".pdf" style="width:100%;">
+                <p id="linkRNCAssinado" style="font-size:0.8rem; display:none;">
+                    Arquivo atual: <a href="#" target="_blank">Ver RNC Assinado</a>
+                </p>
+            </div>
+
+            <div id="secaoNotificacao" style="margin-top: 15px; display: none;">
+                <button type="button" id="btnNotificarEmpresa" class="btn-warning" style="width:100%; padding:12px;">
+                    <i class="fas fa-envelope"></i> Enviar Notificação para Empresa (RNC + Relatório)
+                </button>
+            </div>
+
+            <div id="secaoPlanoAcao" style="margin-top: 15px; display: none;">
+                <label style="font-weight:bold;">Anexar Plano de Ação (enviado pela empresa):</label>
+                <input type="file" id="arquivoPlanoAcao" accept=".pdf,.doc,.docx" style="width:100%;">
+                <p id="linkPlanoAcao" style="font-size:0.8rem; display:none;">
+                    Arquivo atual: <a href="#" target="_blank">Ver Plano de Ação</a>
+                </p>
+            </div>
+
+            <div id="secaoItensPlano" style="margin-top: 15px; display: none;">
+                <h4>Itens do Plano de Ação</h4>
+                <div id="listaItensPlano">
+                    <p style="color:#999; font-style:italic;">Nenhum item cadastrado.</p>
+                </div>
+                <button type="button" id="btnAdicionarItem" class="btn-primary" style="margin-top:10px;">
+                    <i class="fas fa-plus"></i> Adicionar Item
+                </button>
+            </div>
+
+            <button type="button" id="btnSalvarProcesso" class="btn-success" style="width:100%; margin-top:15px;">
+                <i class="fas fa-save"></i> Salvar Processo
+            </button>
+        </div>
+
         <div class="card mt-20">
             <h3>Histórico de Inspeções</h3>
             <div class="table-responsive">

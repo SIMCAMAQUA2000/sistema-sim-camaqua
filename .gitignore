@@ -1,0 +1,21 @@
+# Arquivos de ambiente
+.env
+.env.local
+.env.production
+
+# Dependências
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Arquivos temporários
+*.tmp
+*.temp
+
+# Build
+dist/
+build/
+# Local Netlify folder
+.netlify

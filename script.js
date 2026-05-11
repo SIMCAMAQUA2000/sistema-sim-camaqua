@@ -1,4 +1,7 @@
-// --- CONFIGURAÇÃO INICIAL (SEGURANÇA) ---
+// ============================================================================
+// 1. CONFIGURAÇÕES INICIAIS (SUPABASE E GOOGLE DRIVE)
+// ============================================================================
+
 if (typeof window.SUPABASE_CONFIG === 'undefined') {
     console.error('CRÍTICO: Arquivo config.js não foi carregado ou está vazio.');
     alert('Erro de sistema: Configuração ausente (config.js).');
@@ -9,10 +12,136 @@ const _supabase = window.supabase.createClient(
     window.SUPABASE_CONFIG.key
 );
 
-// --- VARIÁVEIS GLOBAIS ---
+function isMissingColumnError(err) {
+    return err && err.message && (err.message.includes('Could not find the') || err.message.includes('column'));
+}
+
+function stripProcessFields(data) {
+    const safe = { ...data };
+    ['status_processo', 'url_rnc_assinado', 'url_plano_acao', 'itens_plano_acao', 'data_notificacao', 'data_plano_recebido'].forEach(key => delete safe[key]);
+    return safe;
+}
+
+async function safeUpdateVistoria(id, data) {
+    try {
+        return await _supabase.from('vistorias').update(data).eq('id', id);
+    } catch (error) {
+        if (isMissingColumnError(error)) {
+            const safeData = stripProcessFields(data);
+            return await _supabase.from('vistorias').update(safeData).eq('id', id);
+        }
+        throw error;
+    }
+}
+
+async function safeInsertVistoria(data) {
+    try {
+        return await _supabase.from('vistorias').insert([data]);
+    } catch (error) {
+        if (isMissingColumnError(error)) {
+            const safeData = stripProcessFields(data);
+            return await _supabase.from('vistorias').insert([safeData]);
+        }
+        throw error;
+    }
+}
+
+// --- CONFIGURAÇÃO GOOGLE DRIVE ---
+const GOOGLE_CLIENT_ID = '4880205076286-gtma5gtdfu7lv8d6o151k48f39oekl0r.apps.googleusercontent.com';
+const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/drive.file'; 
+let tokenClient;
+let googleAccessToken = null;
+
+// Função chamada automaticamente pelo HTML quando a biblioteca do Google carrega
+window.initTokenClient = function() {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: GOOGLE_SCOPES,
+        callback: (response) => {
+            if (response.access_token) {
+                googleAccessToken = response.access_token;
+                processarBackupParaDrive();
+            }
+        },
+    });
+};
+
+// --- FUNÇÃO: DISPARA O PEDIDO DE LOGIN AO GOOGLE ---
+window.realizarBackupNoDrive = () => {
+    if (typeof google === 'undefined' || !tokenClient) {
+        return Swal.fire('Aguarde', 'O sistema do Google ainda está a carregar...', 'warning');
+    }
+
+    if (!googleAccessToken) {
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+    } else {
+        processarBackupParaDrive();
+    }
+};
+
+// --- FUNÇÃO: GERA O ZIP E ENVIA PARA O DRIVE ---
+async function processarBackupParaDrive() {
+    try {
+        Swal.fire({ 
+            title: 'Preparando Backup...', 
+            text: 'A gerar ficheiro e a comunicar com o Google Drive...',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading() 
+        });
+
+        const [est, prod, docs, vist] = await Promise.all([
+            _supabase.from('estabelecimentos').select('*'),
+            _supabase.from('produtos').select('*'),
+            _supabase.from('documentos').select('*'),
+            _supabase.from('vistorias').select('*')
+        ]);
+
+        const zip = new JSZip();
+        const dataHoje = new Date().toISOString().split('T')[0];
+        const pastaRaiz = zip.folder(`BACKUP_SIM_${dataHoje}`);
+        
+        pastaRaiz.folder("01_Estabelecimentos").file("dados.json", JSON.stringify(est.data, null, 2));
+        pastaRaiz.folder("02_Produtos").file("dados.json", JSON.stringify(prod.data, null, 2));
+        pastaRaiz.folder("03_Documentos").file("dados.json", JSON.stringify(docs.data, null, 2));
+        pastaRaiz.folder("04_Vistorias").file("dados.json", JSON.stringify(vist.data, null, 2));
+
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const nomeFicheiro = `SIM_BACKUP_CLOUD_${dataHoje}.zip`;
+
+        const metadata = {
+            name: nomeFicheiro,
+            mimeType: 'application/zip'
+        };
+
+        const formData = new FormData();
+        formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        formData.append('file', zipBlob);
+
+        const upload = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${googleAccessToken}` },
+            body: formData
+        });
+
+        if (upload.ok) {
+            Swal.fire('Sucesso!', 'O backup foi guardado com sucesso no seu Google Drive!', 'success');
+        } else {
+            throw new Error('Falha no upload para o Google.');
+        }
+
+    } catch (err) {
+        console.error(err);
+        Swal.fire('Erro', 'Ocorreu um erro ao enviar para o Drive. Tente novamente.', 'error');
+        googleAccessToken = null; 
+    }
+}
+
+
+// ============================================================================
+// 2. VARIÁVEIS GLOBAIS E UTILITÁRIOS
+// ============================================================================
 let listaProdutosTemp = [];
 
-// --- UTILITÁRIOS ---
 function formatarDataSemFuso(dataString) {
     if (!dataString) return '-';
     const dataLimpa = dataString.split('T')[0];
@@ -20,14 +149,12 @@ function formatarDataSemFuso(dataString) {
     return `${dia}/${mes}/${ano}`;
 }
 
-// Função Auxiliar: Adicionar Dias Úteis (Ignora Sábado/Domingo)
 function adicionarDiasUteis(data, dias) {
     let count = 0;
     let novaData = new Date(data);
     while (count < dias) {
         novaData.setDate(novaData.getDate() + 1);
         const diaSemana = novaData.getDay();
-        // 0 = Domingo, 6 = Sábado
         if (diaSemana !== 0 && diaSemana !== 6) {
             count++;
         }
@@ -52,7 +179,10 @@ function carregarImagem(url) {
     });
 }
 
-// --- 1. ROTEAMENTO ---
+
+// ============================================================================
+// 3. ROTEAMENTO E LOGIN
+// ============================================================================
 async function checkAuth() {
     const { data: { session } } = await _supabase.auth.getSession();
     const path = window.location.pathname;
@@ -87,7 +217,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-// --- 2. LOGIN ---
 function setupLogin() {
     const form = document.getElementById('loginForm');
     form.addEventListener('submit', async (e) => {
@@ -108,7 +237,10 @@ function setupLogin() {
     });
 }
 
-// --- 3. DASHBOARD ---
+
+// ============================================================================
+// 4. DASHBOARD E LISTAGENS
+// ============================================================================
 function setupDashboard(session) {
     const inputCnpj = document.getElementById('cnpj');
     if(inputCnpj) {
@@ -186,7 +318,7 @@ function setupDashboard(session) {
                     numero_registro_produto: p.reg,
                     apresentacao_peso: p.peso
                 }));
-                const { error: errProd } = await _supabase.from('produtos').insert(produtosParaSalvar);
+                await _supabase.from('produtos').insert(produtosParaSalvar);
             }
 
             Swal.fire({
@@ -276,7 +408,10 @@ async function carregarEstabelecimentos(busca = '') {
     });
 }
 
-// --- FUNÇÃO GLOBAL: FICHA CADASTRAL COMPLETA ---
+
+// ============================================================================
+// 5. GERAÇÃO DE PDFS (FICHA, TÍTULO, RNC, DOSSIÊ)
+// ============================================================================
 window.gerarFichaCompleta = async (id) => {
      const confirmacao = await Swal.fire({
         title: 'Gerar Ficha?',
@@ -406,7 +541,6 @@ window.gerarFichaCompleta = async (id) => {
     }
 }
 
-// --- FUNÇÃO GLOBAL: TÍTULO DE REGISTRO (CORRIGIDA) ---
 window.gerarTitulo = async (id) => {
     const { value: portaria } = await Swal.fire({
         title: 'Gerar Título',
@@ -435,7 +569,6 @@ window.gerarTitulo = async (id) => {
         const height = doc.internal.pageSize.getHeight();
         const centroX = width / 2;
 
-        // Borda Decorativa
         doc.setLineWidth(1.5); doc.setDrawColor(44, 62, 80); doc.rect(10, 10, width - 20, height - 20);
         doc.setLineWidth(0.5); doc.rect(12, 12, width - 24, height - 24);
 
@@ -463,21 +596,14 @@ window.gerarTitulo = async (id) => {
         const linha4Y = startY + (gap * 3); doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(100); doc.text("LOGRADOURO / LOCALIZAÇÃO", 30, linha4Y);
         doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(0); doc.text(`${est.endereco}, ${est.municipio} - CEP: ${est.cep || ""}`.toUpperCase(), 30, linha4Y + 5);
 
-        // --- CORREÇÃO DO QR CODE ---
         const currentPath = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'));
-        // Garante que não haja barras duplas (ex: origin//verificacao)
         const baseUrl = (window.location.origin + currentPath + '/verificacao.html').replace(/([^:]\/)\/+/g, "$1");
         
         const linkValidacao = `${baseUrl}?nome=${encodeURIComponent(est.razao_social)}&cnpj=${encodeURIComponent(est.cnpj_cpf)}&sim=${encodeURIComponent(est.numero_sim)}&status=${encodeURIComponent(est.status)}`;
 
         try { 
-            // Aumenta qualidade e margem do QR Code
             const qrData = await QRCode.toDataURL(linkValidacao, { width: 300, margin: 1, errorCorrectionLevel: 'M' });
-            
-            // Posiciona no canto inferior esquerdo, mas acima da margem
             doc.addImage(qrData, 'PNG', 20, 155, 30, 30);
-            
-            // Adiciona Legenda Explicativa
             doc.setFontSize(8);
             doc.setTextColor(44, 62, 80);
             doc.text("Valide a autenticidade", 35, 188, { align: "center" });
@@ -503,21 +629,17 @@ window.gerarTitulo = async (id) => {
     }
 }
 
-// --- FUNÇÃO GLOBAL: RNC CONFORME MODELO DOCX (ATUALIZADA SEQUENCIAL, ALINHADA E COM EDIÇÃO) ---
 window.gerarRNC = async (vistoriaId) => {
     try {
-        // 1. Busca dados ANTES do popup
         const { data: v } = await _supabase.from('vistorias').select('*').eq('id', vistoriaId).single();
         if(!v) throw new Error("Vistoria não encontrada");
         const { data: est } = await _supabase.from('estabelecimentos').select('*').eq('id', v.estabelecimento_id).single();
 
-        // Variáveis para armazenar as respostas dos passos
         let embasamento, elementoInspecao;
         let textoNCEditado;
         let textoLegalEditado;
         let respLegal, respTecnico, vet1, vet2;
 
-        // --- PASSO 1: DADOS DA INFRAÇÃO ---
         const step1 = await Swal.fire({
             title: '1. Dados da Infração',
             html:
@@ -536,8 +658,6 @@ window.gerarRNC = async (vistoriaId) => {
         [embasamento, elementoInspecao] = step1.value;
         if(!embasamento || !elementoInspecao) return Swal.fire('Erro', 'Preencha os campos obrigatórios.', 'warning');
 
-        // --- PASSO 2: REVISÃO DE NÃO CONFORMIDADES (NOVIDADE: EDIÇÃO) ---
-        // Pega o texto atual do banco ou usa "Sem não conformidades" se vazio
         const textoOriginalNC = v.observacoes || "Nenhuma não conformidade registrada no checklist.";
         
         const step2 = await Swal.fire({
@@ -552,12 +672,10 @@ window.gerarRNC = async (vistoriaId) => {
         if (!step2.isConfirmed) return;
         textoNCEditado = step2.value;
 
-        // Atualiza a RNC no banco com o texto editado (para ficar salvo)
         if (textoNCEditado !== textoOriginalNC) {
             await _supabase.from('vistorias').update({ observacoes: textoNCEditado }).eq('id', vistoriaId);
         }
 
-        // --- PASSO 3: TEXTO LEGAL (PLANO DE AÇÃO) ---
         const textoPadrao = "A resposta do estabelecimento deverá ser formalizada em documento oficial da própria instituição, contendo a descrição detalhada das ações corretivas propostas para cada não conformidade apontada, com a indicação dos respectivos prazos para sua implementação. O documento deverá configurar um Plano de Ação, discriminando as medidas corretivas imediatas e o cronograma das ações subsequentes planejadas. O Plano de Ação deverá ser assinado pelos responsáveis técnicos e legais do estabelecimento e encaminhado ao serviço oficial digital, prazo máximo de 15 (quinze) dias úteis a partir do recebimento deste documento.";
         
         const step3 = await Swal.fire({
@@ -570,7 +688,6 @@ window.gerarRNC = async (vistoriaId) => {
         if (!step3.isConfirmed) return;
         textoLegalEditado = step3.value;
 
-        // --- PASSO 4: ASSINATURAS ---
         const step4 = await Swal.fire({
             title: '4. Assinaturas',
             width: '600px',
@@ -595,13 +712,10 @@ window.gerarRNC = async (vistoriaId) => {
         if (!step4.isConfirmed) return;
         [respLegal, respTecnico, vet1, vet2] = step4.value;
 
-        // --- GERAÇÃO DO PDF ---
         Swal.fire({ title: 'Gerando PDF...', didOpen: () => Swal.showLoading() });
 
-        // 3. Carregar Imagens
         const [logoCamaqua, logoSim] = await Promise.all([ carregarImagem('./assets/brasao_camaqua.png'), carregarImagem('./assets/logo_sim.png') ]);
 
-        // 4. Lógica do Número Sequencial da RNC
         let num = v.rnc_numero, ano = v.rnc_ano, anoAtual = new Date().getFullYear();
         if (!num) {
             const { data: ult } = await _supabase.from('vistorias').select('rnc_numero').eq('rnc_ano', anoAtual).order('rnc_numero', { ascending: false }).limit(1);
@@ -613,17 +727,14 @@ window.gerarRNC = async (vistoriaId) => {
         const { jsPDF } = window.jspdf; 
         const doc = new jsPDF(); 
         const centroX = 105;
-
-        // MARGEM PADRÃO PARA ALINHAMENTO
         const commonMargin = { left: 10, right: 10 };
 
-        // --- CABEÇALHO PERSONALIZADO ---
         doc.autoTable({
             startY: 10,
             body: [
                 [
                     { content: '', styles: { cellWidth: 25 } }, 
-                    { content: '', styles: { cellWidth: 140 } }, // Célula central vazia (desenhada no hook)
+                    { content: '', styles: { cellWidth: 140 } }, 
                     { content: '', styles: { cellWidth: 25 } }
                 ]
             ],
@@ -631,38 +742,25 @@ window.gerarRNC = async (vistoriaId) => {
             margin: commonMargin,
             styles: { lineColor: [0, 0, 0], lineWidth: 0.1, minCellHeight: 28 },
             didDrawCell: (data) => {
-                // Desenha Logos e Texto
                 if (data.section === 'body' && data.row.index === 0) {
-                    // Logos nas laterais
                     if (data.column.index === 0 && logoCamaqua) {
                          doc.addImage(logoCamaqua, 'PNG', data.cell.x + 2, data.cell.y + 4, 21, 21);
                     }
                     if (data.column.index === 2 && logoSim) {
                          doc.addImage(logoSim, 'PNG', data.cell.x + 2, data.cell.y + 4, 21, 21);
                     }
-
-                    // Texto Central (Linha por Linha)
                     if (data.column.index === 1) {
                         const centerX = data.cell.x + (data.cell.width / 2);
-                        let currentY = data.cell.y + 6; // Padding top
-
+                        let currentY = data.cell.y + 6; 
                         doc.setFontSize(9);
-                        
-                        // 1. Governo (Normal)
                         doc.setFont("helvetica", "normal");
                         doc.text("GOVERNO DO ESTADO DO RIO GRANDE DO SUL", centerX, currentY, { align: "center" });
-                        
-                        // 2. Prefeitura (Negrito)
                         currentY += 5;
                         doc.setFont("helvetica", "bold");
                         doc.text("PREFEITURA MUNICIPAL DE CAMAQUÃ", centerX, currentY, { align: "center" });
-
-                        // 3. Secretaria (Normal)
                         currentY += 5;
                         doc.setFont("helvetica", "normal");
                         doc.text("SECRETARIA MUNICIPAL DE AGRICULTURA E ABASTECIMENTO", centerX, currentY, { align: "center" });
-
-                        // 4. SIM (Normal)
                         currentY += 5;
                         doc.text("SERVIÇO DE INSPEÇÃO MUNICIPAL", centerX, currentY, { align: "center" });
                     }
@@ -670,12 +768,10 @@ window.gerarRNC = async (vistoriaId) => {
             }
         });
 
-        // Título Principal
         let yPos = doc.lastAutoTable.finalY + 10;
         doc.setFontSize(14); doc.setFont("helvetica", "bold");
         doc.text("RELATÓRIO DE NÃO CONFORMIDADE", centroX, yPos, { align: "center" });
 
-        // Tabela 1: Identificação RNC
         doc.autoTable({ 
             startY: yPos + 5, 
             head:[['NÚMERO', 'SIM', 'DATA']], 
@@ -686,7 +782,6 @@ window.gerarRNC = async (vistoriaId) => {
             headStyles: { fontStyle: 'bold', fillColor: [220, 220, 220] } 
         });
 
-        // Tabela 2: Estabelecimento
         doc.autoTable({ 
             body:[
                 [{ content: 'ESTABELECIMENTO:', styles: { fontStyle: 'bold', cellWidth: 40 } }, est.razao_social.toUpperCase()]
@@ -697,7 +792,6 @@ window.gerarRNC = async (vistoriaId) => {
             margin: { top: 2, ...commonMargin } 
         });
 
-        // Tabela 3: Detalhes da Irregularidade
         doc.autoTable({ 
             body:[
                 [{ content: 'EMBASAMENTO LEGAL', styles: { fontStyle: 'bold', cellWidth: 60, fillColor: [220, 220, 220] } }, embasamento],
@@ -711,7 +805,6 @@ window.gerarRNC = async (vistoriaId) => {
             margin: { top: 5, ...commonMargin }
         });
 
-        // TÍTULO "DESCRIÇÃO DO DOCUMENTO" (NOVA CAIXA)
         doc.autoTable({
             startY: doc.lastAutoTable.finalY + 2,
             head:[['DESCRIÇÃO DO DOCUMENTO']], 
@@ -721,9 +814,6 @@ window.gerarRNC = async (vistoriaId) => {
             styles:{fontSize:9, cellPadding:2, lineColor:0, lineWidth:0.1}
         });
 
-        // 6. ASSINATURAS UNIFICADAS
-        
-        // Título "ASSINATURAS" com caixa cinza
         doc.autoTable({
             startY: doc.lastAutoTable.finalY + 5,
             head: [['ASSINATURAS']],
@@ -733,7 +823,6 @@ window.gerarRNC = async (vistoriaId) => {
             headStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], halign: 'center', fontStyle: 'bold', lineColor: [0,0,0], lineWidth: 0.1 }
         });
 
-        // Lógica Dinâmica para VET 1 ou VET 1+2
         let linhaVeterinarios = [];
         const vet1Formatado = vet1 ? `\n\n___________________________\n${vet1}` : '';
         const vet2Formatado = vet2 ? `\n\n___________________________\n${vet2}` : '';
@@ -752,7 +841,6 @@ window.gerarRNC = async (vistoriaId) => {
         const l1 = respLegal ? respLegal.toUpperCase() : "Responsável Legal";
         const l2 = respTecnico ? respTecnico.toUpperCase() : "Responsável Técnico";
 
-        // Grade de Assinaturas
         doc.autoTable({
             startY: doc.lastAutoTable.finalY, 
             body: [
@@ -768,7 +856,6 @@ window.gerarRNC = async (vistoriaId) => {
             columnStyles: { 0: { cellWidth: 95 }, 1: { cellWidth: 95 } }
         });
 
-        // TÍTULO "MEDIDAS A SEREM ADOTADAS..." (MOVIDO PARA O FINAL)
         doc.autoTable({ 
             startY: doc.lastAutoTable.finalY + 5,
             head:[['MEDIDAS A SEREM ADOTADAS PELO ESTABELECIMENTO']], 
@@ -787,323 +874,6 @@ window.gerarRNC = async (vistoriaId) => {
     }
 }
 
-// --- FUNÇÕES DE OUTRAS PÁGINAS (COMPLETAS) ---
-
-// DOCUMENTOS
-async function setupDocumentosPage() {
-    const estId = new URLSearchParams(window.location.search).get('id'); if (!estId) return;
-    const { data: est } = await _supabase.from('estabelecimentos').select('*').eq('id', estId).single();
-    if(est) document.getElementById('tituloEmpresa').textContent = est.nome_fantasia;
-    
-    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-        e.preventDefault(); const file = document.getElementById('arquivoInput').files[0];
-        const nome = `${estId}_${Date.now()}`;
-        
-        const {data, error} = await _supabase.storage.from('documentos-sim').upload(nome, file);
-        if(error) return Swal.fire('Erro', 'Falha no upload', 'error');
-
-        const url = _supabase.storage.from('documentos-sim').getPublicUrl(nome).data.publicUrl;
-        
-        await _supabase.from('documentos').insert([{estabelecimento_id: estId, nome_arquivo: file.name, tipo_documento: document.getElementById('tipoDoc').value, url_arquivo: url}]);
-        Swal.fire('OK', 'Documento enviado', 'success'); carregarDocumentos(estId);
-    });
-    carregarDocumentos(estId);
-}
-async function carregarDocumentos(id) {
-    const { data } = await _supabase.from('documentos').select('*').eq('estabelecimento_id', id);
-    const tbody = document.querySelector('#tabelaDocumentos tbody'); 
-    if(!tbody) return;
-    tbody.innerHTML = '';
-    data.forEach(d => tbody.innerHTML += `<tr><td>${formatarDataSemFuso(d.created_at)}</td><td>${d.tipo_documento}</td><td><a href="${d.url_arquivo}" target="_blank">Ver</a></td><td><button onclick="deletarItem('documentos',${d.id})" style="color:red;border:none;">X</button></td></tr>`);
-}
-
-// PRODUTOS
-async function setupProdutosPage() {
-    const estId = new URLSearchParams(window.location.search).get('id'); if (!estId) return;
-    const { data: est } = await _supabase.from('estabelecimentos').select('*').eq('id', estId).single();
-    if(est) document.getElementById('tituloEmpresa').textContent = est.nome_fantasia;
-    
-    document.getElementById('produtoForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        await _supabase.from('produtos').insert([{estabelecimento_id: estId, numero_registro_produto: document.getElementById('numRegistroProd').value, nome: document.getElementById('nomeProd').value, marca: document.getElementById('marcaProd').value, embalagem: document.getElementById('embalagemProd').value, apresentacao_peso: document.getElementById('pesoProd').value}]);
-        Swal.fire('OK', 'Produto cadastrado', 'success'); carregarProdutos(estId);
-    });
-    carregarProdutos(estId);
-}
-async function carregarProdutos(id) {
-    const { data } = await _supabase.from('produtos').select('*').eq('estabelecimento_id', id);
-    const tbody = document.querySelector('#tabelaProdutos tbody'); 
-    if(!tbody) return;
-    tbody.innerHTML = '';
-    data.forEach(p => tbody.innerHTML += `<tr><td>${p.numero_registro_produto}</td><td>${p.nome}</td><td>${p.marca}</td><td>${p.embalagem}</td><td><button onclick="deletarItem('produtos',${p.id})" style="color:red;border:none;">X</button></td></tr>`);
-}
-
-// --- FUNÇÕES GLOBAIS DE EXCLUSÃO ---
-window.excluirEstabelecimento = async (id) => { 
-    const res = await Swal.fire({ title: 'Excluir?', text: 'Essa ação é irreversível.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' });
-    if(res.isConfirmed) { await _supabase.from('estabelecimentos').delete().eq('id', id); carregarEstabelecimentos(); Swal.fire('Excluído!', '', 'success'); } 
-};
-window.deletarItem = async (t, id) => { 
-    const res = await Swal.fire({ title: 'Apagar item?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' });
-    if(res.isConfirmed) { await _supabase.from(t).delete().eq('id', id); location.reload(); } 
-};
-
-// --- VISTORIAS ---
-async function setupVistoriasPage() {
-    const estId = new URLSearchParams(window.location.search).get('id');
-    if (!estId) { window.location.href = 'dashboard.html'; return; }
-    
-    const { data: est } = await _supabase.from('estabelecimentos').select('*').eq('id', estId).single();
-    if (est) document.getElementById('tituloEmpresa').textContent = est.nome_fantasia || est.razao_social;
-    
-    const inputData = document.getElementById('dataVistoria');
-    inputData.value = new Date().toISOString().split('T')[0];
-    
-    const selectPrazo = document.getElementById('prazoProxima');
-    const selectTipoContagem = document.getElementById('tipoContagem');
-    const inputDataProxima = document.getElementById('dataProxima');
-
-    // Botão Cancelar Edição (se existir no HTML)
-    const btnCancelar = document.getElementById('btnCancelarEdicao');
-    if(btnCancelar) {
-        btnCancelar.addEventListener('click', () => { location.reload(); });
-    }
-
-    function calcularData() {
-        const dias = parseInt(selectPrazo.value);
-        const tipo = selectTipoContagem.value; // 'corridos' ou 'uteis'
-        const dataBase = new Date(inputData.value + 'T00:00:00');
-
-        if (tipo === 'uteis') {
-            const novaData = adicionarDiasUteis(dataBase, dias);
-            inputDataProxima.value = novaData.toISOString().split('T')[0];
-        } else {
-            // Dias corridos (padrão antigo)
-            dataBase.setDate(dataBase.getDate() + dias);
-            inputDataProxima.value = dataBase.toISOString().split('T')[0];
-        }
-    }
-
-    selectPrazo.addEventListener('change', calcularData);
-    selectTipoContagem.addEventListener('change', calcularData);
-    inputData.addEventListener('change', calcularData);
-    calcularData();
-
-    document.getElementById('vistoriaForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        // ID para Edição (se existir)
-        const vistoriaId = document.getElementById('vistoriaId') ? document.getElementById('vistoriaId').value : null;
-
-        const conclusaoEl = document.getElementById('conclusaoSelect');
-        if (!conclusaoEl) {
-            console.error('Elemento conclusaoSelect não encontrado.');
-            return Swal.fire('Erro', 'Formulário inválido. Recarregue a página.', 'error');
-        }
-
-        const conclusao = conclusaoEl.value;
-        let statusDB = 'satisfatoria';
-        if (conclusao === '7.2') statusDB = 'com_deficiencias';
-        if (conclusao === '7.3') statusDB = 'grave_deficiencia';
-
-        // CAPTURA DO CHECKLIST (NOVO)
-        const checklistJson = {};
-        document.querySelectorAll('.check-item').forEach(item => {
-            const num = item.querySelector('.check-number').innerText;
-            const activeBtn = item.querySelector('.opt-btn.active');
-            if(activeBtn) {
-                checklistJson[num] = activeBtn.dataset.val;
-            }
-        });
-
-        // Upload
-        const fileInput = document.getElementById('arquivoVistoria');
-        const file = fileInput.files[0];
-        let url = "";
-        
-        // Se estiver editando, tenta pegar a URL antiga
-        if (vistoriaId && document.getElementById('urlAnexoAtual')) {
-            url = document.getElementById('urlAnexoAtual').value;
-        }
-
-        // Se não tem ID e não tem arquivo, bloqueia (Novo registro)
-        if (!vistoriaId && !file) {
-             return Swal.fire('Erro', 'Anexe o checklist assinado.', 'warning');
-        }
-
-        if (file) {
-            const nomeArquivo = `checklist_${estId}_${Date.now()}`;
-            const { error: upError } = await _supabase.storage.from('documentos-sim').upload(nomeArquivo, file);
-            if (upError) return Swal.fire('Erro Upload', upError.message, 'error');
-            url = _supabase.storage.from('documentos-sim').getPublicUrl(nomeArquivo).data.publicUrl;
-        }
-
-        const dadosSalvar = {
-            estabelecimento_id: estId,
-            data_vistoria: inputData.value,
-            status: statusDB,
-            observacoes: document.getElementById('obsVistoria').value,
-            dias_para_proxima: selectPrazo.value,
-            data_proxima_vistoria: inputDataProxima.value,
-            url_anexo: url,
-            checklist_data: checklistJson // SALVA O JSON
-        };
-
-        let erroOp;
-        if (vistoriaId) {
-            // UPDATE
-            const { error } = await _supabase.from('vistorias').update(dadosSalvar).eq('id', vistoriaId);
-            erroOp = error;
-        } else {
-            // INSERT
-            const { error } = await _supabase.from('vistorias').insert([dadosSalvar]);
-            erroOp = error;
-        }
-
-        if(erroOp) return Swal.fire('Erro', erroOp.message, 'error');
-
-        Swal.fire('Sucesso', 'Vistoria Registrada!', 'success');
-        
-        // Limpeza Pós-Salvar
-        e.target.reset();
-        document.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('active'));
-        if(document.getElementById('vistoriaId')) document.getElementById('vistoriaId').value = "";
-        if(document.getElementById('urlAnexoAtual')) document.getElementById('urlAnexoAtual').value = "";
-        if(document.getElementById('linkAnexoAtual')) document.getElementById('linkAnexoAtual').style.display = 'none';
-        if(document.getElementById('btnSalvarVistoria')) document.getElementById('btnSalvarVistoria').innerHTML = '<i class="fas fa-save"></i> Salvar Vistoria';
-        if(btnCancelar) btnCancelar.style.display = 'none';
-
-        carregarVistorias(estId);
-    });
-    carregarVistorias(estId);
-}
-
-// NOVA FUNÇÃO: EDITAR VISTORIA
-window.editarVistoria = async (id) => {
-    const { data: v } = await _supabase.from('vistorias').select('*').eq('id', id).single();
-    if(!v) return;
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
-    // Preencher campos básicos
-    document.getElementById('vistoriaId').value = v.id;
-    document.getElementById('dataVistoria').value = v.data_vistoria;
-    
-    let conclusao = "7.1";
-    if(v.status === 'com_deficiencias') conclusao = "7.2";
-    if(v.status === 'grave_deficiencia') conclusao = "7.3";
-    document.getElementById('conclusaoSelect').value = conclusao;
-
-    document.getElementById('obsVistoria').value = v.observacoes;
-    document.getElementById('prazoProxima').value = v.dias_para_proxima;
-    document.getElementById('dataProxima').value = v.data_proxima_vistoria;
-    
-    // Anexo
-    if(v.url_anexo) {
-        document.getElementById('urlAnexoAtual').value = v.url_anexo;
-        const linkDiv = document.getElementById('linkAnexoAtual');
-        linkDiv.style.display = 'block';
-        linkDiv.querySelector('a').href = v.url_anexo;
-    }
-
-    // UI
-    document.getElementById('btnSalvarVistoria').innerHTML = '<i class="fas fa-sync"></i> Atualizar Vistoria';
-    document.getElementById('btnCancelarEdicao').style.display = 'block';
-
-    // RESTAURAR CHECKLIST
-    document.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('active'));
-    
-    if (v.checklist_data) {
-        const json = v.checklist_data;
-        document.querySelectorAll('.check-item').forEach(item => {
-            const num = item.querySelector('.check-number').innerText;
-            if (json[num]) {
-                const btnToClick = item.querySelector(`.opt-btn[data-val="${json[num]}"]`);
-                if(btnToClick) btnToClick.classList.add('active');
-            }
-        });
-    }
-}
-
-// NOVA FUNÇÃO: EXCLUIR VISTORIA
-window.excluirVistoria = async (id) => {
-    const res = await Swal.fire({ title: 'Excluir Vistoria?', text: 'Isso não pode ser desfeito.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' });
-    if(res.isConfirmed) {
-        await _supabase.from('vistorias').delete().eq('id', id);
-        const estId = new URLSearchParams(window.location.search).get('id');
-        carregarVistorias(estId);
-        Swal.fire('Excluído', '', 'success');
-    }
-}
-
-async function carregarVistorias(id) {
-    const tbody = document.querySelector('#tabelaVistorias tbody');
-    if(!tbody) return;
-    tbody.innerHTML = '';
-    
-    const { data } = await _supabase.from('vistorias').select('*').eq('estabelecimento_id', id).order('data_vistoria', {ascending:false});
-    
-    data.forEach(v => {
-        const precisaRNC = (v.status === 'com_deficiencias' || v.status === 'grave_deficiencia');
-        const btnRNC = precisaRNC 
-            ? `<button onclick="gerarRNC(${v.id})" style="background:#c0392b; color:white; padding:5px 10px; border:none; cursor:pointer; border-radius:4px; font-weight:bold; font-size: 0.8rem;">RNC</button>` 
-            : '<span style="color:#27ae60; font-weight:bold;">-</span>';
-
-        tbody.innerHTML += `<tr>
-            <td>${formatarDataSemFuso(v.data_vistoria)}</td>
-            <td>${v.status.toUpperCase()}</td>
-            <td><a href="${v.url_anexo}" target="_blank">Anexo</a></td>
-            <td>${formatarDataSemFuso(v.data_proxima_vistoria)}</td>
-            <td>
-                <div style="display:flex; gap:5px;">
-                    ${btnRNC}
-                    <button onclick="editarVistoria(${v.id})" class="btn-warning" style="background:#f39c12; color:white; padding:5px; border:none; cursor:pointer; border-radius:4px;" title="Editar"><i class="fas fa-edit"></i></button>
-                    <button onclick="excluirVistoria(${v.id})" class="btn-danger" style="background:#c0392b; color:white; padding:5px; border:none; cursor:pointer; border-radius:4px;" title="Excluir"><i class="fas fa-trash"></i></button>
-                </div>
-            </td>
-        </tr>`;
-    });
-}
-
-// --- NOVA FUNÇÃO: BACKUP COMPLETO DO SISTEMA ---
-window.realizarBackupSistema = async () => {
-    try {
-        Swal.fire({ title: 'Gerando Backup...', text: 'Aguarde enquanto os dados são baixados.', didOpen: () => Swal.showLoading() });
-
-        const [est, prod, docs, vist] = await Promise.all([
-            _supabase.from('estabelecimentos').select('*'),
-            _supabase.from('produtos').select('*'),
-            _supabase.from('documentos').select('*'),
-            _supabase.from('vistorias').select('*')
-        ]);
-
-        const dadosBackup = {
-            data_backup: new Date().toISOString(),
-            estabelecimentos: est.data || [],
-            produtos: prod.data || [],
-            documentos: docs.data || [],
-            vistorias: vist.data || []
-        };
-
-        const jsonString = JSON.stringify(dadosBackup, null, 2);
-        const blob = new Blob([jsonString], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `BACKUP_SIM_${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        
-        Swal.fire('Sucesso', 'Arquivo de backup salvo no seu computador.', 'success');
-
-    } catch (err) {
-        console.error(err);
-        Swal.fire('Erro', 'Falha ao gerar backup.', 'error');
-    }
-};
-// --- FUNÇÃO: GERAR DOSSIÊ VISUAL COMPLETO (COM CONTEÚDO DOS ANEXOS) ---
 window.gerarPDFListaDocumentos = async () => {
     const estId = new URLSearchParams(window.location.search).get('id');
     if (!estId) return Swal.fire('Erro', 'Estabelecimento não encontrado.', 'error');
@@ -1116,7 +886,6 @@ window.gerarPDFListaDocumentos = async () => {
             didOpen: () => Swal.showLoading() 
         });
 
-        // 1. Busca dados
         const { data: est } = await _supabase.from('estabelecimentos').select('*').eq('id', estId).single();
         const { data: docs } = await _supabase.from('documentos').select('*').eq('estabelecimento_id', estId).order('created_at', { ascending: false });
 
@@ -1129,9 +898,6 @@ window.gerarPDFListaDocumentos = async () => {
         const doc = new jsPDF('p', 'mm', 'a4');
         const commonMargin = { left: 10, right: 10 };
 
-        // --- PÁGINA 1: CAPA E LISTAGEM ---
-        
-        // Cabeçalho Oficial
         doc.autoTable({
             startY: 10,
             body: [[{ content: '', styles: { cellWidth: 25 } }, { content: '', styles: { cellWidth: 140 } }, { content: '', styles: { cellWidth: 25 } }]],
@@ -1160,7 +926,6 @@ window.gerarPDFListaDocumentos = async () => {
         doc.setFontSize(10).setFont("helvetica", "normal");
         doc.text(`CNPJ: ${est.cnpj_cpf}  |  Nº SIM: ${est.numero_sim}`, 105, doc.lastAutoTable.finalY + 22, { align: "center" });
 
-        // Tabela de Índice
         doc.autoTable({
             startY: doc.lastAutoTable.finalY + 30,
             head: [['DATA', 'TIPO DE DOCUMENTO', 'NOME DO ARQUIVO']],
@@ -1169,19 +934,13 @@ window.gerarPDFListaDocumentos = async () => {
             headStyles: { fillColor: [44, 62, 80] },
             styles: { fontSize: 9 }
         });
-
-        // --- PROCESSAMENTO DOS ANEXOS (IMAGENS E PDFS) ---
         
-        // Configura o PDF.js worker
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
         for (const d of docs) {
             if (!d.url_arquivo) continue;
-
-            // Nova página para cada documento
             doc.addPage();
             
-            // Título do Anexo no topo da página
             doc.setFillColor(240, 240, 240);
             doc.rect(10, 10, 190, 10, 'F');
             doc.setFontSize(10).setFont("helvetica", "bold").setTextColor(50);
@@ -1192,14 +951,12 @@ window.gerarPDFListaDocumentos = async () => {
 
             try {
                 if (extensao === 'pdf') {
-                    // Lógica para converter PDF em Imagem (Página por Página)
                     const loadingTask = pdfjsLib.getDocument(d.url_arquivo);
                     const pdf = await loadingTask.promise;
                     
                     for (let n = 1; n <= pdf.numPages; n++) {
                         if (n > 1) {
                             doc.addPage();
-                            // Repete o título em páginas subsequentes do mesmo PDF
                             doc.setFontSize(8).text(`(Continuação: ${d.nome_arquivo} - Pág ${n})`, 105, 8, {align: 'center'});
                         }
 
@@ -1213,11 +970,9 @@ window.gerarPDFListaDocumentos = async () => {
                         await page.render({ canvasContext: context, viewport: viewport }).promise;
                         const imgData = canvas.toDataURL('image/jpeg', 0.8);
                         
-                        // Ajusta a imagem para caber na folha A4 (deixando margens)
                         doc.addImage(imgData, 'JPEG', 10, 25, 190, 260, undefined, 'FAST');
                     }
                 } else {
-                    // Lógica para Imagens Diretas (JPG, PNG)
                     const imgData = await carregarImagem(d.url_arquivo);
                     if (imgData) {
                         doc.addImage(imgData, 'PNG', 10, 25, 190, 260, undefined, 'FAST');
@@ -1239,3 +994,597 @@ window.gerarPDFListaDocumentos = async () => {
         Swal.fire('Erro', 'Ocorreu um erro ao processar os arquivos visuais.', 'error');
     }
 };
+
+
+// ============================================================================
+// 6. FUNÇÕES DE PÁGINAS SECUNDÁRIAS (DOCUMENTOS, PRODUTOS, VISTORIAS)
+// ============================================================================
+async function setupDocumentosPage() {
+    const estId = new URLSearchParams(window.location.search).get('id'); if (!estId) return;
+    const { data: est } = await _supabase.from('estabelecimentos').select('*').eq('id', estId).single();
+    if(est) document.getElementById('tituloEmpresa').textContent = est.nome_fantasia;
+    
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+        e.preventDefault(); const file = document.getElementById('arquivoInput').files[0];
+        const nome = `${estId}_${Date.now()}`;
+        
+        const {data, error} = await _supabase.storage.from('documentos-sim').upload(nome, file);
+        if(error) return Swal.fire('Erro', 'Falha no upload', 'error');
+
+        const url = _supabase.storage.from('documentos-sim').getPublicUrl(nome).data.publicUrl;
+        
+        await _supabase.from('documentos').insert([{estabelecimento_id: estId, nome_arquivo: file.name, tipo_documento: document.getElementById('tipoDoc').value, url_arquivo: url}]);
+        Swal.fire('OK', 'Documento enviado', 'success'); carregarDocumentos(estId);
+    });
+    carregarDocumentos(estId);
+}
+async function carregarDocumentos(id) {
+    const { data } = await _supabase.from('documentos').select('*').eq('estabelecimento_id', id);
+    const tbody = document.querySelector('#tabelaDocumentos tbody'); 
+    if(!tbody) return;
+    tbody.innerHTML = '';
+    data.forEach(d => tbody.innerHTML += `<tr><td>${formatarDataSemFuso(d.created_at)}</td><td>${d.tipo_documento}</td><td><a href="${d.url_arquivo}" target="_blank">Ver</a></td><td><button onclick="deletarItem('documentos',${d.id})" style="color:red;border:none;">X</button></td></tr>`);
+}
+
+async function setupProdutosPage() {
+    const estId = new URLSearchParams(window.location.search).get('id'); if (!estId) return;
+    const { data: est } = await _supabase.from('estabelecimentos').select('*').eq('id', estId).single();
+    if(est) document.getElementById('tituloEmpresa').textContent = est.nome_fantasia;
+    
+    document.getElementById('produtoForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await _supabase.from('produtos').insert([{estabelecimento_id: estId, numero_registro_produto: document.getElementById('numRegistroProd').value, nome: document.getElementById('nomeProd').value, marca: document.getElementById('marcaProd').value, embalagem: document.getElementById('embalagemProd').value, apresentacao_peso: document.getElementById('pesoProd').value}]);
+        Swal.fire('OK', 'Produto cadastrado', 'success'); carregarProdutos(estId);
+    });
+    carregarProdutos(estId);
+}
+async function carregarProdutos(id) {
+    const { data } = await _supabase.from('produtos').select('*').eq('estabelecimento_id', id);
+    const tbody = document.querySelector('#tabelaProdutos tbody'); 
+    if(!tbody) return;
+    tbody.innerHTML = '';
+    data.forEach(p => tbody.innerHTML += `<tr><td>${p.numero_registro_produto}</td><td>${p.nome}</td><td>${p.marca}</td><td>${p.embalagem}</td><td><button onclick="deletarItem('produtos',${p.id})" style="color:red;border:none;">X</button></td></tr>`);
+}
+
+window.excluirEstabelecimento = async (id) => { 
+    const res = await Swal.fire({ title: 'Excluir?', text: 'Essa ação é irreversível.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' });
+    if(res.isConfirmed) { await _supabase.from('estabelecimentos').delete().eq('id', id); carregarEstabelecimentos(); Swal.fire('Excluído!', '', 'success'); } 
+};
+
+window.deletarItem = async (t, id) => { 
+    const res = await Swal.fire({ title: 'Apagar item?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' });
+    if(res.isConfirmed) { await _supabase.from(t).delete().eq('id', id); location.reload(); } 
+};
+
+async function setupVistoriasPage() {
+    const estId = new URLSearchParams(window.location.search).get('id');
+    if (!estId) { window.location.href = 'dashboard.html'; return; }
+    
+    const { data: est } = await _supabase.from('estabelecimentos').select('*').eq('id', estId).single();
+    if (est) document.getElementById('tituloEmpresa').textContent = est.nome_fantasia || est.razao_social;
+    
+    const inputData = document.getElementById('dataVistoria');
+    inputData.value = new Date().toISOString().split('T')[0];
+    
+    const selectPrazo = document.getElementById('prazoProxima');
+    const selectTipoContagem = document.getElementById('tipoContagem');
+    const inputDataProxima = document.getElementById('dataProxima');
+
+    const btnCancelar = document.getElementById('btnCancelarEdicao');
+    if(btnCancelar) {
+        btnCancelar.addEventListener('click', () => { location.reload(); });
+    }
+
+    function calcularData() {
+        const dias = parseInt(selectPrazo.value);
+        const tipo = selectTipoContagem.value; 
+        const dataBase = new Date(inputData.value + 'T00:00:00');
+
+        if (tipo === 'uteis') {
+            const novaData = adicionarDiasUteis(dataBase, dias);
+            inputDataProxima.value = novaData.toISOString().split('T')[0];
+        } else {
+            dataBase.setDate(dataBase.getDate() + dias);
+            inputDataProxima.value = dataBase.toISOString().split('T')[0];
+        }
+    }
+
+    selectPrazo.addEventListener('change', calcularData);
+    selectTipoContagem.addEventListener('change', calcularData);
+    inputData.addEventListener('change', calcularData);
+    calcularData();
+
+    document.getElementById('vistoriaForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const vistoriaId = document.getElementById('vistoriaId') ? document.getElementById('vistoriaId').value : null;
+
+        const conclusaoEl = document.getElementById('conclusaoSelect');
+        if (!conclusaoEl) {
+            console.error('Elemento conclusaoSelect não encontrado.');
+            return Swal.fire('Erro', 'Formulário inválido. Recarregue a página.', 'error');
+        }
+
+        const conclusao = conclusaoEl.value;
+        let statusDB = 'satisfatoria';
+        let statusProcessoInicial = null;
+        if (conclusao === '7.2') {
+            statusDB = 'com_deficiencias';
+            statusProcessoInicial = 'rnc_gerado';
+        }
+        if (conclusao === '7.3') {
+            statusDB = 'grave_deficiencia';
+            statusProcessoInicial = 'rnc_gerado';
+        }
+
+        const checklistJson = {};
+        document.querySelectorAll('.check-item').forEach(item => {
+            const num = item.querySelector('.check-number').innerText;
+            const activeBtn = item.querySelector('.opt-btn.active');
+            if(activeBtn) {
+                checklistJson[num] = activeBtn.dataset.val;
+            }
+        });
+
+        const fileInput = document.getElementById('arquivoVistoria');
+        const file = fileInput.files[0];
+        let url = "";
+        
+        if (vistoriaId && document.getElementById('urlAnexoAtual')) {
+            url = document.getElementById('urlAnexoAtual').value;
+        }
+
+        if (!vistoriaId && !file) {
+             return Swal.fire('Erro', 'Anexe o checklist assinado.', 'warning');
+        }
+
+        if (file) {
+            const nomeArquivo = `checklist_${estId}_${Date.now()}`;
+            const { error: upError } = await _supabase.storage.from('documentos-sim').upload(nomeArquivo, file);
+            if (upError) return Swal.fire('Erro Upload', upError.message, 'error');
+            url = _supabase.storage.from('documentos-sim').getPublicUrl(nomeArquivo).data.publicUrl;
+        }
+
+        const dadosSalvar = {
+            estabelecimento_id: estId,
+            data_vistoria: inputData.value,
+            status: statusDB,
+            observacoes: document.getElementById('obsVistoria').value,
+            dias_para_proxima: selectPrazo.value,
+            data_proxima_vistoria: inputDataProxima.value,
+            url_anexo: url,
+            checklist_data: checklistJson 
+        };
+
+        // Adicionar status do processo se aplicável
+        if (statusProcessoInicial) {
+            dadosSalvar.status_processo = statusProcessoInicial;
+        }
+
+        let erroOp;
+        if (vistoriaId) {
+            const { error } = await safeUpdateVistoria(vistoriaId, dadosSalvar);
+            erroOp = error;
+        } else {
+            const { error } = await safeInsertVistoria(dadosSalvar);
+            erroOp = error;
+        }
+
+        if(erroOp) return Swal.fire('Erro', erroOp.message, 'error');
+
+        Swal.fire('Sucesso', 'Vistoria Registrada!', 'success');
+        
+        e.target.reset();
+        document.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('active'));
+        if(document.getElementById('vistoriaId')) document.getElementById('vistoriaId').value = "";
+        if(document.getElementById('urlAnexoAtual')) document.getElementById('urlAnexoAtual').value = "";
+        if(document.getElementById('linkAnexoAtual')) document.getElementById('linkAnexoAtual').style.display = 'none';
+        if(document.getElementById('btnSalvarVistoria')) document.getElementById('btnSalvarVistoria').innerHTML = '<i class="fas fa-save"></i> Salvar Vistoria';
+        if(btnCancelar) btnCancelar.style.display = 'none';
+
+        carregarVistorias(estId);
+    });
+    carregarVistorias(estId);
+}
+
+window.setupProcessoVistoria = async (vistoriaId) => {
+    const { data: v } = await _supabase.from('vistorias').select('*').eq('id', vistoriaId).single();
+    if(!v) return;
+
+    // Mostrar seção de processo
+    document.getElementById('secaoProcesso').style.display = 'block';
+    document.getElementById('secaoProcesso').scrollIntoView({ behavior: 'smooth' });
+
+    // Carregar dados existentes
+    if(v.status_processo) {
+        document.getElementById('statusProcesso').value = v.status_processo;
+        atualizarVisibilidadeProcesso();
+    }
+
+    if(v.url_rnc_assinado) {
+        document.getElementById('linkRNCAssinado').style.display = 'block';
+        document.getElementById('linkRNCAssinado').querySelector('a').href = v.url_rnc_assinado;
+    }
+
+    if(v.url_plano_acao) {
+        document.getElementById('linkPlanoAcao').style.display = 'block';
+        document.getElementById('linkPlanoAcao').querySelector('a').href = v.url_plano_acao;
+    }
+
+    // Carregar itens do plano de ação
+    if(v.itens_plano_acao) {
+        carregarItensPlanoAcao(v.itens_plano_acao);
+    }
+
+    // Configurar eventos
+    document.getElementById('statusProcesso').addEventListener('change', atualizarVisibilidadeProcesso);
+    document.getElementById('btnNotificarEmpresa').addEventListener('click', () => notificarEmpresa(vistoriaId));
+    document.getElementById('btnAdicionarItem').addEventListener('click', () => adicionarItemPlanoAcao(vistoriaId));
+    document.getElementById('btnSalvarProcesso').addEventListener('click', () => salvarProcesso(vistoriaId));
+}
+
+function atualizarVisibilidadeProcesso() {
+    const status = document.getElementById('statusProcesso').value;
+    
+    // Mostrar seção RNC assinado se status for rnc_gerado ou superior
+    document.getElementById('secaoRNCAssinado').style.display = 
+        ['rnc_gerado', 'notificado', 'plano_recebido', 'itens_cadastrados', 'concluido'].includes(status) ? 'block' : 'none';
+    
+    // Mostrar botão notificação apenas se status for rnc_gerado
+    document.getElementById('secaoNotificacao').style.display = status === 'rnc_gerado' ? 'block' : 'none';
+    
+    // Mostrar seção plano de ação se status for notificado ou superior
+    document.getElementById('secaoPlanoAcao').style.display = 
+        ['notificado', 'plano_recebido', 'itens_cadastrados', 'concluido'].includes(status) ? 'block' : 'none';
+    
+    // Mostrar seção itens se status for plano_recebido ou superior
+    document.getElementById('secaoItensPlano').style.display = 
+        ['plano_recebido', 'itens_cadastrados', 'concluido'].includes(status) ? 'block' : 'none';
+}
+
+function getNetlifyFunctionUrl(name) {
+    const origin = window.location.origin;
+    if (origin.includes('github.dev') || origin.includes('app.github.dev')) {
+        return `http://127.0.0.1:8888/.netlify/functions/${name}`;
+    }
+    return `/.netlify/functions/${name}`;
+}
+
+async function notificarEmpresa(vistoriaId) {
+    const confirmacao = await Swal.fire({
+        title: 'Enviar Notificação?',
+        text: 'Isso enviará cópia da RNC e relatório de vistoria por email para a empresa. Confirma?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Enviar',
+        cancelButtonText: 'Cancelar'
+    });
+
+    if(!confirmacao.isConfirmed) return;
+
+    try {
+        const { data: v } = await _supabase.from('vistorias').select('*').eq('id', vistoriaId).single();
+        const { data: est } = await _supabase.from('estabelecimentos').select('*').eq('id', v.estabelecimento_id).single();
+
+        const toEmail = est.email_contato || est.email;
+        if (!toEmail) {
+            return Swal.fire('Erro', 'Empresa não possui e-mail cadastrado.', 'error');
+        }
+
+        const reportUrl = v.url_anexo || 'Não há relatório anexado';
+        const rncUrl = v.url_rnc_assinado || 'Não há RNC assinado anexado';
+        const subject = `Notificação Oficial - SIM Camaquã - ${est.razao_social}`;
+        const html = `
+            <p>Prezado(a),</p>
+            <p>Segue notificação formal referente ao estabelecimento <strong>${est.razao_social}</strong> (SIM ${est.numero_sim || '---'}).</p>
+            <p>Documentos relacionados:</p>
+            <ul>
+                <li>RNC Assinado: ${typeof rncUrl === 'string' && rncUrl.startsWith('http') ? `<a href="${rncUrl}" target="_blank">Abrir RNC Assinado</a>` : rncUrl}</li>
+                <li>Relatório de Vistoria: ${typeof reportUrl === 'string' && reportUrl.startsWith('http') ? `<a href="${reportUrl}" target="_blank">Abrir Relatório</a>` : reportUrl}</li>
+            </ul>
+            <p>Solicitamos que o estabelecimento responda formalmente com o plano de ação dentro do prazo estabelecido.</p>
+            <p>Atenciosamente,<br>Serviço de Inspeção Municipal - SIM Camaquã</p>
+        `;
+        const plain_text = `Prezado(a),\n\nSegue notificação formal referente ao estabelecimento ${est.razao_social} (SIM ${est.numero_sim || '---'}).\n\nRNC Assinado: ${rncUrl}\nRelatório de Vistoria: ${reportUrl}\n\nSolicitamos que o estabelecimento responda formalmente com o plano de ação dentro do prazo estabelecido.\n\nAtenciosamente,\nServiço de Inspeção Municipal - SIM Camaquã`;
+
+        const response = await fetch(getNetlifyFunctionUrl('send-email'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                to: toEmail,
+                to_name: est.razao_social,
+                subject,
+                html,
+                plain_text,
+            })
+        });
+
+        const text = await response.text();
+        let result = {};
+        try {
+            result = text ? JSON.parse(text) : {};
+        } catch (parseError) {
+            console.warn('Resposta não JSON da função de email:', text);
+            result = { error: text || 'Resposta inesperada da função de email.' };
+        }
+
+        if (!response.ok) {
+            throw new Error(result.error || 'Falha ao enviar email.');
+        }
+
+        await safeUpdateVistoria(vistoriaId, {
+            status_processo: 'notificado',
+            data_notificacao: new Date().toISOString()
+        });
+
+        Swal.fire('Sucesso', 'Email enviado para a empresa!', 'success');
+        document.getElementById('statusProcesso').value = 'notificado';
+        atualizarVisibilidadeProcesso();
+
+    } catch (error) {
+        console.error(error);
+        Swal.fire('Erro', error.message || 'Falha ao enviar notificação.', 'error');
+    }
+}
+
+async function salvarProcesso(vistoriaId) {
+    try {
+        const statusProcesso = document.getElementById('statusProcesso').value;
+        let dadosUpdate = { status_processo: statusProcesso };
+
+        // Upload RNC assinado se houver
+        const fileRNC = document.getElementById('arquivoRNCAssinado').files[0];
+        if(fileRNC) {
+            const nomeArquivo = `rnc_assinado_${vistoriaId}_${Date.now()}.pdf`;
+            const { error: upError } = await _supabase.storage.from('documentos-sim').upload(nomeArquivo, fileRNC);
+            if (upError) throw new Error('Erro upload RNC: ' + upError.message);
+            dadosUpdate.url_rnc_assinado = _supabase.storage.from('documentos-sim').getPublicUrl(nomeArquivo).data.publicUrl;
+        }
+
+        // Upload plano de ação se houver
+        const filePlano = document.getElementById('arquivoPlanoAcao').files[0];
+        if(filePlano) {
+            const nomeArquivo = `plano_acao_${vistoriaId}_${Date.now()}`;
+            const { error: upError } = await _supabase.storage.from('documentos-sim').upload(nomeArquivo, filePlano);
+            if (upError) throw new Error('Erro upload plano: ' + upError.message);
+            dadosUpdate.url_plano_acao = _supabase.storage.from('documentos-sim').getPublicUrl(nomeArquivo).data.publicUrl;
+            dadosUpdate.status_processo = 'plano_recebido';
+            dadosUpdate.data_plano_recebido = new Date().toISOString();
+        }
+
+        await safeUpdateVistoria(vistoriaId, dadosUpdate);
+
+        Swal.fire('Sucesso', 'Processo salvo!', 'success');
+        document.getElementById('statusProcesso').value = dadosUpdate.status_processo;
+        atualizarVisibilidadeProcesso();
+
+    } catch (error) {
+        Swal.fire('Erro', error.message, 'error');
+    }
+}
+
+async function adicionarItemPlanoAcao(vistoriaId) {
+    const { value: formValues } = await Swal.fire({
+        title: 'Adicionar Item do Plano de Ação',
+        html:
+            '<input id="swal-descricao" class="swal2-input" placeholder="Descrição do item">' +
+            '<input id="swal-prazo" type="date" class="swal2-input" placeholder="Prazo">',
+        focusConfirm: false,
+        preConfirm: () => {
+            return [
+                document.getElementById('swal-descricao').value,
+                document.getElementById('swal-prazo').value
+            ]
+        }
+    });
+
+    if (!formValues || !formValues[0] || !formValues[1]) return;
+
+    const [descricao, prazo] = formValues;
+
+    // Buscar itens atuais
+    const { data: v } = await _supabase.from('vistorias').select('itens_plano_acao').eq('id', vistoriaId).single();
+    let itens = v.itens_plano_acao || [];
+
+    // Adicionar novo item
+    itens.push({
+        id: Date.now(),
+        descricao: descricao,
+        prazo: prazo,
+        status: 'pendente',
+        data_criacao: new Date().toISOString()
+    });
+
+    // Salvar no banco
+    await safeUpdateVistoria(vistoriaId, { 
+        itens_plano_acao: itens,
+        status_processo: 'itens_cadastrados'
+    });
+
+    // Recarregar itens
+    carregarItensPlanoAcao(itens);
+    document.getElementById('statusProcesso').value = 'itens_cadastrados';
+    atualizarVisibilidadeProcesso();
+
+    Swal.fire('Sucesso', 'Item adicionado!', 'success');
+}
+
+function carregarItensPlanoAcao(itens) {
+    const container = document.getElementById('listaItensPlano');
+    
+    if(!itens || itens.length === 0) {
+        container.innerHTML = '<p style="color:#999; font-style:italic;">Nenhum item cadastrado.</p>';
+        return;
+    }
+
+    container.innerHTML = '';
+    itens.forEach(item => {
+        const itemDiv = document.createElement('div');
+        itemDiv.style.cssText = 'border:1px solid #ddd; padding:10px; margin:5px 0; border-radius:4px; background:#f9f9f9;';
+        
+        const statusColor = item.status === 'concluido' ? '#27ae60' : item.status === 'atrasado' ? '#c0392b' : '#f39c12';
+        
+        itemDiv.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="flex:1;">
+                    <strong>${item.descricao}</strong><br>
+                    <small>Prazo: ${formatarDataSemFuso(item.prazo)} | Status: <span style="color:${statusColor};">${item.status.toUpperCase()}</span></small>
+                </div>
+                <div>
+                    <select onchange="atualizarStatusItem(${item.id}, this.value)" style="padding:2px 5px; border:1px solid #ddd; border-radius:3px;">
+                        <option value="pendente" ${item.status === 'pendente' ? 'selected' : ''}>Pendente</option>
+                        <option value="em_andamento" ${item.status === 'em_andamento' ? 'selected' : ''}>Em Andamento</option>
+                        <option value="concluido" ${item.status === 'concluido' ? 'selected' : ''}>Concluído</option>
+                        <option value="atrasado" ${item.status === 'atrasado' ? 'selected' : ''}>Atrasado</option>
+                    </select>
+                    <button onclick="removerItemPlano(${item.id})" style="background:#c0392b; color:white; border:none; padding:2px 5px; border-radius:3px; cursor:pointer; margin-left:5px;">×</button>
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(itemDiv);
+    });
+}
+
+async function atualizarStatusItem(itemId, novoStatus) {
+    const vistoriaId = document.getElementById('vistoriaId').value;
+    const { data: v } = await _supabase.from('vistorias').select('itens_plano_acao').eq('id', vistoriaId).single();
+    
+    if(v.itens_plano_acao) {
+        const itens = v.itens_plano_acao.map(item => 
+            item.id == itemId ? {...item, status: novoStatus} : item
+        );
+        
+        await safeUpdateVistoria(vistoriaId, { itens_plano_acao: itens });
+        carregarItensPlanoAcao(itens);
+    }
+}
+
+async function removerItemPlano(itemId) {
+    const confirmacao = await Swal.fire({
+        title: 'Remover Item?',
+        text: 'Esta ação não pode ser desfeita.',
+        icon: 'warning',
+        showCancelButton: true
+    });
+
+    if(!confirmacao.isConfirmed) return;
+
+    const vistoriaId = document.getElementById('vistoriaId').value;
+    const { data: v } = await _supabase.from('vistorias').select('itens_plano_acao').eq('id', vistoriaId).single();
+    
+    if(v.itens_plano_acao) {
+        const itens = v.itens_plano_acao.filter(item => item.id != itemId);
+        await safeUpdateVistoria(vistoriaId, { itens_plano_acao: itens });
+        carregarItensPlanoAcao(itens);
+    }
+}
+
+window.editarVistoria = async (id) => {
+    const { data: v } = await _supabase.from('vistorias').select('*').eq('id', id).single();
+    if(!v) return;
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    document.getElementById('vistoriaId').value = v.id;
+    document.getElementById('dataVistoria').value = v.data_vistoria;
+    
+    let conclusao = "7.1";
+    if(v.status === 'com_deficiencias') conclusao = "7.2";
+    if(v.status === 'grave_deficiencia') conclusao = "7.3";
+    document.getElementById('conclusaoSelect').value = conclusao;
+
+    document.getElementById('obsVistoria').value = v.observacoes;
+    document.getElementById('prazoProxima').value = v.dias_para_proxima;
+    document.getElementById('dataProxima').value = v.data_proxima_vistoria;
+    
+    if(v.url_anexo) {
+        document.getElementById('urlAnexoAtual').value = v.url_anexo;
+        const linkDiv = document.getElementById('linkAnexoAtual');
+        linkDiv.style.display = 'block';
+        linkDiv.querySelector('a').href = v.url_anexo;
+    }
+
+    document.getElementById('btnSalvarVistoria').innerHTML = '<i class="fas fa-sync"></i> Atualizar Vistoria';
+    document.getElementById('btnCancelarEdicao').style.display = 'block';
+
+    // Carregar dados do processo se existir
+    if(v.status_processo || v.url_rnc_assinado || v.url_plano_acao || v.itens_plano_acao) {
+        document.getElementById('secaoProcesso').style.display = 'block';
+        document.getElementById('statusProcesso').value = v.status_processo || 'pendente';
+        
+        if(v.url_rnc_assinado) {
+            document.getElementById('linkRNCAssinado').style.display = 'block';
+            document.getElementById('linkRNCAssinado').querySelector('a').href = v.url_rnc_assinado;
+        }
+
+        if(v.url_plano_acao) {
+            document.getElementById('linkPlanoAcao').style.display = 'block';
+            document.getElementById('linkPlanoAcao').querySelector('a').href = v.url_plano_acao;
+        }
+
+        if(v.itens_plano_acao) {
+            carregarItensPlanoAcao(v.itens_plano_acao);
+        }
+
+        atualizarVisibilidadeProcesso();
+    }
+    
+    document.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('active'));
+    
+    if (v.checklist_data) {
+        const json = v.checklist_data;
+        document.querySelectorAll('.check-item').forEach(item => {
+            const num = item.querySelector('.check-number').innerText;
+            if (json[num]) {
+                const btnToClick = item.querySelector(`.opt-btn[data-val="${json[num]}"]`);
+                if(btnToClick) btnToClick.classList.add('active');
+            }
+        });
+    }
+}
+
+window.excluirVistoria = async (id) => {
+    const res = await Swal.fire({ title: 'Excluir Vistoria?', text: 'Isso não pode ser desfeito.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33' });
+    if(res.isConfirmed) {
+        await _supabase.from('vistorias').delete().eq('id', id);
+        const estId = new URLSearchParams(window.location.search).get('id');
+        carregarVistorias(estId);
+        Swal.fire('Excluído', '', 'success');
+    }
+}
+
+async function carregarVistorias(id) {
+    const tbody = document.querySelector('#tabelaVistorias tbody');
+    if(!tbody) return;
+    tbody.innerHTML = '';
+    
+    const { data } = await _supabase.from('vistorias').select('*').eq('estabelecimento_id', id).order('data_vistoria', {ascending:false});
+    
+    data.forEach(v => {
+        const precisaRNC = (v.status === 'com_deficiencias' || v.status === 'grave_deficiencia');
+        const btnRNC = precisaRNC 
+            ? `<button onclick="gerarRNC(${v.id})" style="background:#c0392b; color:white; padding:5px 10px; border:none; cursor:pointer; border-radius:4px; font-weight:bold; font-size: 0.8rem;">RNC</button>` 
+            : '<span style="color:#27ae60; font-weight:bold;">-</span>';
+
+        const statusProcesso = v.status_processo || 'pendente';
+        const btnProcesso = precisaRNC 
+            ? `<button onclick="setupProcessoVistoria(${v.id})" style="background:#8e44ad; color:white; padding:5px 10px; border:none; cursor:pointer; border-radius:4px; font-weight:bold; font-size: 0.8rem;">${statusProcesso.replace('_', ' ').toUpperCase()}</button>`
+            : '<span style="color:#95a5a6; font-weight:bold;">-</span>';
+
+        tbody.innerHTML += `<tr>
+            <td>${formatarDataSemFuso(v.data_vistoria)}</td>
+            <td>${v.status.toUpperCase()}</td>
+            <td><a href="${v.url_anexo}" target="_blank">Anexo</a></td>
+            <td>${formatarDataSemFuso(v.data_proxima_vistoria)}</td>
+            <td>
+                <div style="display:flex; gap:5px; flex-wrap:wrap;">
+                    ${btnRNC}
+                    ${btnProcesso}
+                    <button onclick="editarVistoria(${v.id})" class="btn-warning" style="background:#f39c12; color:white; padding:5px; border:none; cursor:pointer; border-radius:4px;" title="Editar"><i class="fas fa-edit"></i></button>
+                    <button onclick="excluirVistoria(${v.id})" class="btn-danger" style="background:#c0392b; color:white; padding:5px; border:none; cursor:pointer; border-radius:4px;" title="Excluir"><i class="fas fa-trash"></i></button>
+                </div>
+            </td>
+        </tr>`;
+    });
+}

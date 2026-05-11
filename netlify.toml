@@ -1,5 +1,6 @@
 [build]
   publish = "."
+  functions = "netlify/functions"
 
 # Garante que, se você usar History PushState no futuro, as rotas não quebrem
 [[redirects]]
