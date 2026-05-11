@@ -44,12 +44,31 @@ exports.handler = async function(event, context) {
     };
   }
 
-  const { to, subject, html, plain_text, to_name, attachments } = payload;
+  const { to, subject, html, plain_text, to_name, attachmentUrls } = payload;
   if (!to || !subject || !html) {
     return {
       statusCode: 400,
       body: JSON.stringify({ error: 'Missing required fields: to, subject, html.' }),
     };
+  }
+
+  let attachments = [];
+  if (Array.isArray(attachmentUrls) && attachmentUrls.length > 0) {
+    for (const attachmentUrl of attachmentUrls) {
+      try {
+        const fileResponse = await fetch(attachmentUrl.url);
+        if (fileResponse.ok) {
+          const buffer = Buffer.from(await fileResponse.arrayBuffer());
+          attachments.push({
+            filename: attachmentUrl.filename,
+            content: buffer,
+            contentType: attachmentUrl.contentType || 'application/pdf'
+          });
+        }
+      } catch (err) {
+        console.warn('Não foi possível baixar anexo:', err);
+      }
+    }
   }
 
   const transporter = nodemailer.createTransport({

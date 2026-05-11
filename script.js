@@ -1282,30 +1282,24 @@ async function notificarEmpresa(vistoriaId) {
                 <li>RNC Assinado: ${typeof rncUrl === 'string' && rncUrl.startsWith('http') ? `<a href="${rncUrl}" target="_blank">Abrir RNC Assinado</a>` : rncUrl}</li>
                 <li>Relatório de Vistoria: ${typeof reportUrl === 'string' && reportUrl.startsWith('http') ? `<a href="${reportUrl}" target="_blank">Abrir Relatório</a>` : reportUrl}</li>
             </ul>
-            <p><strong>IMPORTANTE:</strong> Para assinatura digital do documento RNC, utilize o link abaixo:</p>
-            <p><a href="https://assinador.iti.gov.br/" target="_blank" style="background:#007bff; color:white; padding:10px 20px; text-decoration:none; border-radius:5px;">Assinar Documento via Gov.br</a></p>
+            <p><strong>IMPORTANTE:</strong> Para assinatura digital do documento RNC, acesse:</p>
+            <p><a href="https://assinador.iti.gov.br/" target="_blank" style="color:#007bff; text-decoration:underline;">https://assinador.iti.gov.br/</a></p>
+            <p>Ou clique no botão abaixo:</p>
+            <p><a href="https://assinador.iti.gov.br/" target="_blank" style="background-color:#007bff; color:#ffffff; padding:10px 20px; text-decoration:none; border-radius:5px; display:inline-block;">Assinar Documento via Gov.br</a></p>
+            <p>O documento RNC também está anexado ao email para download direto pelo estabelecimento.</p>
             <p>Solicitamos que o estabelecimento responda formalmente com o plano de ação dentro do prazo estabelecido.</p>
             <p>Atenciosamente,<br>Serviço de Inspeção Municipal - SIM Camaquã</p>
         `;
         const plain_text = `Prezado(a),\n\nSegue notificação formal referente ao estabelecimento ${est.razao_social} (SIM ${est.numero_sim || '---'}).\n\nRNC Assinado: ${rncUrl}\nRelatório de Vistoria: ${reportUrl}\n\nIMPORTANTE: Para assinatura digital do documento RNC, acesse: https://assinador.iti.gov.br/\n\nSolicitamos que o estabelecimento responda formalmente com o plano de ação dentro do prazo estabelecido.\n\nAtenciosamente,\nServiço de Inspeção Municipal - SIM Camaquã`;
 
-        // Preparar anexos
-        let attachments = [];
+        // Preparar anexos a partir da URL pública do RNC
+        let attachmentUrls = [];
         if (rncUrl && rncUrl.startsWith('http')) {
-            try {
-                const rncResponse = await fetch(rncUrl);
-                if (rncResponse.ok) {
-                    const rncBlob = await rncResponse.blob();
-                    const rncArrayBuffer = await rncBlob.arrayBuffer();
-                    attachments.push({
-                        filename: `RNC_Assinado_${est.razao_social.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
-                        content: Buffer.from(rncArrayBuffer),
-                        contentType: 'application/pdf'
-                    });
-                }
-            } catch (error) {
-                console.warn('Erro ao baixar RNC para anexo:', error);
-            }
+            attachmentUrls.push({
+                filename: `RNC_Assinado_${est.razao_social.replace(/[^a-zA-Z0-9\s]/g, '_').replace(/\s+/g, '_')}.pdf`,
+                url: rncUrl,
+                contentType: 'application/pdf'
+            });
         }
 
         const response = await fetch(getNetlifyFunctionUrl('send-email'), {
@@ -1317,7 +1311,7 @@ async function notificarEmpresa(vistoriaId) {
                 subject,
                 html,
                 plain_text,
-                attachments,
+                attachmentUrls,
             })
         });
 
