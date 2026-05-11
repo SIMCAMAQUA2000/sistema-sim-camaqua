@@ -44,7 +44,7 @@ exports.handler = async function(event, context) {
     };
   }
 
-  const { to, subject, html, plain_text, to_name } = payload;
+  const { to, subject, html, plain_text, to_name, attachments } = payload;
   if (!to || !subject || !html) {
     return {
       statusCode: 400,
@@ -68,6 +68,11 @@ exports.handler = async function(event, context) {
     subject,
     text: plain_text || html.replace(/<[^>]*>?/gm, ''),
     html,
+    attachments: attachments ? attachments.map(att => ({
+      filename: att.filename,
+      content: Buffer.from(att.content.data || att.content),
+      contentType: att.contentType || 'application/pdf'
+    })) : [],
   };
 
   try {
