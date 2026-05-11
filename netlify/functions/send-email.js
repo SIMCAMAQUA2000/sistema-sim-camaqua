@@ -44,7 +44,7 @@ exports.handler = async function(event, context) {
     };
   }
 
-  const { to, subject, html, plain_text, to_name, attachmentUrls } = payload;
+  const { to, subject, html, plain_text, to_name, attachments } = payload;
   if (!to || !subject || !html) {
     return {
       statusCode: 400,
@@ -52,23 +52,22 @@ exports.handler = async function(event, context) {
     };
   }
 
-  let attachments = [];
-  if (Array.isArray(attachmentUrls) && attachmentUrls.length > 0) {
-    for (const attachmentUrl of attachmentUrls) {
-      try {
-        const fileResponse = await fetch(attachmentUrl.url);
-        if (fileResponse.ok) {
-          const buffer = Buffer.from(await fileResponse.arrayBuffer());
-          attachments.push({
-            filename: attachmentUrl.filename,
-            content: buffer,
-            contentType: attachmentUrl.contentType || 'application/pdf'
-          });
-        }
-      } catch (err) {
-        console.warn('Não foi possível baixar anexo:', err);
+  let formattedAttachments = [];
+  if (Array.isArray(attachments) && attachments.length > 0) {
+    formattedAttachments = attachments.map(att => {
+      if (att.encoding === 'base64') {
+        return {
+          filename: att.filename,
+          content: Buffer.from(att.content, 'base64'),
+          contentType: att.contentType || 'application/pdf'
+        };
       }
-    }
+      return {
+        filename: att.filename,
+        content: Buffer.from(att.content),
+        contentType: att.contentType || 'application/pdf'
+      };
+    });
   }
 
   const transporter = nodemailer.createTransport({

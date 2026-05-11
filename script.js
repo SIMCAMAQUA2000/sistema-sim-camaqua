@@ -1271,8 +1271,23 @@ async function notificarEmpresa(vistoriaId) {
             return Swal.fire('Erro', 'Empresa não possui e-mail cadastrado.', 'error');
         }
 
+        // Verificar se o RNC assinado está anexado ao processo
+        if (!v.url_rnc_assinado) {
+            const fileRNC = document.getElementById('arquivoRNCAssinado').files[0];
+            if (!fileRNC) {
+                return Swal.fire('Erro', 'Anexe o RNC assinado ao processo antes de enviar a notificação.', 'error');
+            }
+            // Salvar o RNC automaticamente se não estiver salvo
+            const nomeArquivo = `rnc_assinado_${vistoriaId}_${Date.now()}.pdf`;
+            const { error: upError } = await _supabase.storage.from('documentos-sim').upload(nomeArquivo, fileRNC);
+            if (upError) throw new Error('Erro upload RNC: ' + upError.message);
+            const urlRNC = _supabase.storage.from('documentos-sim').getPublicUrl(nomeArquivo).data.publicUrl;
+            await safeUpdateVistoria(vistoriaId, { url_rnc_assinado: urlRNC });
+            v.url_rnc_assinado = urlRNC; // Atualizar a variável local
+        }
+
         const reportUrl = v.url_anexo || 'Não há relatório anexado';
-        const rncUrl = v.url_rnc_assinado || 'Não há RNC assinado anexado';
+        const rncUrl = v.url_rnc_assinado;
         const subject = `Notificação Oficial - SIM Camaquã - ${est.razao_social}`;
         const html = `
             <p>Prezado(a),</p>
