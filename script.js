@@ -1271,9 +1271,18 @@ async function notificarEmpresa(vistoriaId) {
             return Swal.fire('Erro', 'Empresa não possui e-mail cadastrado.', 'error');
         }
 
-        // O RNC assinado deve estar salvo no processo antes de enviar a notificação
+        const fileRNC = document.getElementById('arquivoRNCAssinado')?.files?.[0];
         if (!v.url_rnc_assinado) {
-            return Swal.fire('Erro', 'Anexe o RNC assinado ao processo antes de enviar a notificação.', 'error');
+            if (fileRNC) {
+                const nomeArquivo = `rnc_assinado_${vistoriaId}_${Date.now()}.pdf`;
+                const { error: upError } = await _supabase.storage.from('documentos-sim').upload(nomeArquivo, fileRNC);
+                if (upError) throw new Error('Erro upload RNC assinado: ' + upError.message);
+                const url = _supabase.storage.from('documentos-sim').getPublicUrl(nomeArquivo).data.publicUrl;
+                await safeUpdateVistoria(vistoriaId, { url_rnc_assinado: url });
+                v.url_rnc_assinado = url;
+            } else {
+                return Swal.fire('Erro', 'Anexe o RNC assinado ao processo antes de enviar a notificação.', 'error');
+            }
         }
 
         const reportUrl = v.url_anexo || 'Não há relatório anexado';
@@ -1295,7 +1304,7 @@ async function notificarEmpresa(vistoriaId) {
             <p>Solicitamos que o estabelecimento responda formalmente com o plano de ação dentro do prazo estabelecido.</p>
             <p>Atenciosamente,<br>Serviço de Inspeção Municipal - SIM Camaquã</p>
         `;
-        const plain_text = `Prezado(a),\n\nSegue notificação formal referente ao estabelecimento ${est.razao_social} (SIM ${est.numero_sim || '---'}).\n\nRNC Assinado: ${rncUrl}\nRelatório de Vistoria: ${reportUrl}\n\nIMPORTANTE: Para assinatura digital do documento RNC, acesse: https://assinador.iti.gov.br/\n\nSolicitamos que o estabelecimento responda formalmente com o plano de ação dentro do prazo estabelecido.\n\nAtenciosamente,\nServiço de Inspeção Municipal - SIM Camaquã`;
+        const plain_text = `Prezado(a),\n\nSegue notificação formal referente ao estabelecimento ${est.razao_social} (SIM ${est.numero_sim || '---'}).\n\nRNC Assinado: ${rncUrl}\nRelatório de Vistoria: ${reportUrl}\n\nIMPORTANTE: Para assinatura digital do documento RNC, acesse: https://sso.acesso.gov.br/login?client_id=assinador.iti.br&authorization_id=19e1c299c7a\n\nSolicitamos que o estabelecimento responda formalmente com o plano de ação dentro do prazo estabelecido.\n\nAtenciosamente,\nServiço de Inspeção Municipal - SIM Camaquã`;
 
         const response = await fetch(getNetlifyFunctionUrl('send-email'), {
             method: 'POST',
