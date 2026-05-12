@@ -1288,9 +1288,9 @@ async function notificarEmpresa(vistoriaId) {
                 <li>Relatório de Vistoria: ${typeof reportUrl === 'string' && reportUrl.startsWith('http') ? `<a href="${reportUrl}" target="_blank">Abrir Relatório</a>` : reportUrl}</li>
             </ul>
             <p><strong>IMPORTANTE:</strong> Para assinatura digital do documento RNC, acesse:</p>
-            <p><a href="https://assinador.iti.gov.br/" target="_blank" style="color:#007bff; text-decoration:underline;">https://assinador.iti.gov.br/</a></p>
+            <p><a href="https://sso.acesso.gov.br/login?client_id=assinador.iti.br&authorization_id=19e1c299c7a" target="_blank" style="color:#007bff; text-decoration:underline;">https://sso.acesso.gov.br/login?client_id=assinador.iti.br&authorization_id=19e1c299c7a</a></p>
             <p>Ou clique no botão abaixo:</p>
-            <p><a href="https://assinador.iti.gov.br/" target="_blank" style="background-color:#007bff; color:#ffffff; padding:10px 20px; text-decoration:none; border-radius:5px; display:inline-block;">Assinar Documento via Gov.br</a></p>
+            <p><a href="https://sso.acesso.gov.br/login?client_id=assinador.iti.br&authorization_id=19e1c299c7a" target="_blank" style="background-color:#007bff; color:#ffffff; padding:10px 20px; text-decoration:none; border-radius:5px; display:inline-block;">Assinar Documento via Gov.br</a></p>
             <p>O documento RNC está anexado ao processo e pode ser acessado pelo link acima.</p>
             <p>Solicitamos que o estabelecimento responda formalmente com o plano de ação dentro do prazo estabelecido.</p>
             <p>Atenciosamente,<br>Serviço de Inspeção Municipal - SIM Camaquã</p>
