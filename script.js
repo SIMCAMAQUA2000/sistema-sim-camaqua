@@ -1271,19 +1271,9 @@ async function notificarEmpresa(vistoriaId) {
             return Swal.fire('Erro', 'Empresa não possui e-mail cadastrado.', 'error');
         }
 
-        // Verificar se o RNC assinado está anexado ao processo
+        // O RNC assinado deve estar salvo no processo antes de enviar a notificação
         if (!v.url_rnc_assinado) {
-            const fileRNC = document.getElementById('arquivoRNCAssinado').files[0];
-            if (!fileRNC) {
-                return Swal.fire('Erro', 'Anexe o RNC assinado ao processo antes de enviar a notificação.', 'error');
-            }
-            // Salvar o RNC automaticamente se não estiver salvo
-            const nomeArquivo = `rnc_assinado_${vistoriaId}_${Date.now()}.pdf`;
-            const { error: upError } = await _supabase.storage.from('documentos-sim').upload(nomeArquivo, fileRNC);
-            if (upError) throw new Error('Erro upload RNC: ' + upError.message);
-            const urlRNC = _supabase.storage.from('documentos-sim').getPublicUrl(nomeArquivo).data.publicUrl;
-            await safeUpdateVistoria(vistoriaId, { url_rnc_assinado: urlRNC });
-            v.url_rnc_assinado = urlRNC; // Atualizar a variável local
+            return Swal.fire('Erro', 'Anexe o RNC assinado ao processo antes de enviar a notificação.', 'error');
         }
 
         const reportUrl = v.url_anexo || 'Não há relatório anexado';
@@ -1301,70 +1291,33 @@ async function notificarEmpresa(vistoriaId) {
             <p><a href="https://assinador.iti.gov.br/" target="_blank" style="color:#007bff; text-decoration:underline;">https://assinador.iti.gov.br/</a></p>
             <p>Ou clique no botão abaixo:</p>
             <p><a href="https://assinador.iti.gov.br/" target="_blank" style="background-color:#007bff; color:#ffffff; padding:10px 20px; text-decoration:none; border-radius:5px; display:inline-block;">Assinar Documento via Gov.br</a></p>
-            <p>O documento RNC também está anexado ao email para download direto pelo estabelecimento.</p>
+            <p>O documento RNC está anexado ao processo e pode ser acessado pelo link acima.</p>
             <p>Solicitamos que o estabelecimento responda formalmente com o plano de ação dentro do prazo estabelecido.</p>
             <p>Atenciosamente,<br>Serviço de Inspeção Municipal - SIM Camaquã</p>
         `;
         const plain_text = `Prezado(a),\n\nSegue notificação formal referente ao estabelecimento ${est.razao_social} (SIM ${est.numero_sim || '---'}).\n\nRNC Assinado: ${rncUrl}\nRelatório de Vistoria: ${reportUrl}\n\nIMPORTANTE: Para assinatura digital do documento RNC, acesse: https://assinador.iti.gov.br/\n\nSolicitamos que o estabelecimento responda formalmente com o plano de ação dentro do prazo estabelecido.\n\nAtenciosamente,\nServiço de Inspeção Municipal - SIM Camaquã`;
 
-        const fileRNC = document.getElementById('arquivoRNCAssinado').files[0];
-        let attachments = [];
-
-        async function blobToBase64(blob) {
-            return await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result.split(',')[1]);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-        }
-
-        if (fileRNC) {
-            const base64 = await blobToBase64(fileRNC);
-            attachments.push({
-                filename: fileRNC.name || `RNC_Assinado_${est.razao_social.replace(/[^a-zA-Z0-9\s]/g, '_').replace(/\s+/g, '_')}.pdf`,
-                content: base64,
-                contentType: fileRNC.type || 'application/pdf',
-                encoding: 'base64'
-            });
-        } else if (rncUrl && rncUrl.startsWith('http')) {
-            try {
-                const rncResponse = await fetch(rncUrl);
-                if (rncResponse.ok) {
-                    const rncBlob = await rncResponse.blob();
-                    const base64 = await blobToBase64(rncBlob);
-                    attachments.push({
-                        filename: `RNC_Assinado_${est.razao_social.replace(/[^a-zA-Z0-9\s]/g, '_').replace(/\s+/g, '_')}.pdf`,
-                        content: base64,
-                        contentType: 'application/pdf',
-                        encoding: 'base64'
-                    });
-                } else {
-                    console.warn('Falha ao buscar o RNC para anexo:', rncResponse.status);
-                }
-            } catch (error) {
-                console.warn('Erro ao buscar o RNC para anexo:', error);
-            }
-        }
-
         const response = await fetch(getNetlifyFunctionUrl('send-email'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
             body: JSON.stringify({
                 to: toEmail,
                 to_name: est.razao_social,
                 subject,
                 html,
                 plain_text,
-                attachments,
             })
         });
 
-        const text = await response.text();
         let result = {};
-        try {
-            result = text ? JSON.parse(text) : {};
-        } catch (parseError) {
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+            result = await response.json();
+        } else {
+            const text = await response.text();
             console.warn('Resposta não JSON da função de email:', text);
             result = { error: text || 'Resposta inesperada da função de email.' };
         }

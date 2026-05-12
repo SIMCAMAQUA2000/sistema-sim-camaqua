@@ -40,14 +40,16 @@ exports.handler = async function(event, context) {
   } catch (err) {
     return {
       statusCode: 400,
+      headers: corsHeaders,
       body: JSON.stringify({ error: 'Invalid JSON body.' }),
     };
   }
 
-  const { to, subject, html, plain_text, to_name, attachments } = payload;
+  const { to, subject, html, plain_text, to_name, attachments } = payload || {};
   if (!to || !subject || !html) {
     return {
       statusCode: 400,
+      headers: corsHeaders,
       body: JSON.stringify({ error: 'Missing required fields: to, subject, html.' }),
     };
   }
@@ -101,6 +103,7 @@ exports.handler = async function(event, context) {
       body: JSON.stringify({ message: 'Email enviado com sucesso via Gmail.' }),
     };
   } catch (error) {
+    console.error('send-email error:', error);
     return {
       statusCode: 500,
       headers: corsHeaders,
