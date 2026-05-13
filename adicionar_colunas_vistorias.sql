@@ -7,7 +7,9 @@ ADD COLUMN IF NOT EXISTS url_rnc_assinado TEXT,
 ADD COLUMN IF NOT EXISTS url_plano_acao TEXT,
 ADD COLUMN IF NOT EXISTS itens_plano_acao JSONB DEFAULT '[]'::jsonb,
 ADD COLUMN IF NOT EXISTS data_notificacao TIMESTAMP,
-ADD COLUMN IF NOT EXISTS data_plano_recebido TIMESTAMP;
+ADD COLUMN IF NOT EXISTS data_plano_recebido TIMESTAMP,
+ADD COLUMN IF NOT EXISTS url_retorno_plano TEXT,
+ADD COLUMN IF NOT EXISTS data_retorno TIMESTAMP;
 
 -- Verificar se as colunas foram adicionadas
 SELECT column_name, data_type, is_nullable, column_default

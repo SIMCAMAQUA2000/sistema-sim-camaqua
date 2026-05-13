@@ -18,7 +18,7 @@ function isMissingColumnError(err) {
 
 function stripProcessFields(data) {
     const safe = { ...data };
-    ['status_processo', 'url_rnc_assinado', 'url_plano_acao', 'itens_plano_acao', 'data_notificacao', 'data_plano_recebido'].forEach(key => delete safe[key]);
+    ['status_processo', 'url_rnc_assinado', 'url_plano_acao', 'itens_plano_acao', 'data_notificacao', 'data_plano_recebido', 'url_retorno_plano', 'data_retorno'].forEach(key => delete safe[key]);
     return safe;
 }
 
@@ -874,6 +874,242 @@ window.gerarRNC = async (vistoriaId) => {
     }
 }
 
+window.gerarTimelineProcesso = async (vistoriaId) => {
+    try {
+        const { data: v } = await _supabase.from('vistorias').select('*').eq('id', vistoriaId).single();
+        if(!v) throw new Error("Vistoria não encontrada");
+        const { data: est } = await _supabase.from('estabelecimentos').select('*').eq('id', v.estabelecimento_id).single();
+
+        const [logoCamaqua, logoSim] = await Promise.all([ carregarImagem('./assets/brasao_camaqua.png'), carregarImagem('./assets/logo_sim.png') ]);
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const centroX = 105;
+        const pageWidth = 210;
+        const marginLeft = 15;
+        const marginRight = 15;
+        const contentWidth = pageWidth - marginLeft - marginRight;
+
+        // CABEÇALHO
+        if (logoCamaqua) doc.addImage(logoCamaqua, 'PNG', marginLeft, 8, 15, 15);
+        if (logoSim) doc.addImage(logoSim, 'PNG', pageWidth - marginRight - 15, 8, 15, 15);
+        
+        doc.setFontSize(10);
+        doc.text("PREFEITURA MUNICIPAL DE CAMAQUÃ", centroX, 12, { align: "center" });
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.text("SERVIÇO DE INSPEÇÃO MUNICIPAL", centroX, 17, { align: "center" });
+        
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.setTextColor(44, 62, 80);
+        doc.text("LINHA DO TEMPO - ACOMPANHAMENTO DE PROCESSO", centroX, 28, { align: "center" });
+
+        // DADOS BÁSICOS
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(0, 0, 0);
+        
+        doc.text(`Estabelecimento: ${est.razao_social}`, marginLeft, 36);
+        doc.text(`CNPJ/CPF: ${est.cnpj_cpf} | SIM: ${est.numero_sim}`, marginLeft, 41);
+        doc.text(`RNC nº ${v.rnc_numero || '-'}/${v.rnc_ano || '-'}`, marginLeft, 46);
+
+        // LINHA DO TEMPO
+        let yPos = 55;
+        const etapas = [];
+
+        // Etapa 1: RNC Gerado
+        etapas.push({
+            titulo: "RNC Gerado",
+            data: formatarDataSemFuso(v.data_vistoria),
+            descricao: "Relatório de Não Conformidade gerado na vistoria",
+            documentos: [],
+            concluida: true
+        });
+
+        // Etapa 2: RNC Assinado
+        if(v.url_rnc_assinado) {
+            etapas.push({
+                titulo: "RNC Assinado",
+                data: v.data_notificacao ? formatarDataSemFuso(v.data_notificacao) : "---",
+                descricao: "RNC assinado pelos veterinários e SIM",
+                documentos: [{ nome: "RNC Assinado", url: v.url_rnc_assinado }],
+                concluida: true
+            });
+        }
+
+        // Etapa 3: Empresa Notificada
+        if(v.status_processo && ['notificado', 'plano_recebido', 'itens_cadastrados', 'concluido'].includes(v.status_processo)) {
+            etapas.push({
+                titulo: "Empresa Notificada",
+                data: v.data_notificacao ? formatarDataSemFuso(v.data_notificacao) : "---",
+                descricao: "Empresa notificada formalmente sobre as não conformidades",
+                documentos: [],
+                concluida: true
+            });
+        }
+
+        // Etapa 4: Plano de Ação Recebido
+        if(v.url_plano_acao || (v.status_processo && ['plano_recebido', 'itens_cadastrados', 'concluido'].includes(v.status_processo))) {
+            etapas.push({
+                titulo: "Plano de Ação Recebido",
+                data: v.data_plano_recebido ? formatarDataSemFuso(v.data_plano_recebido) : "---",
+                descricao: "Empresa apresentou plano de ação para correção das não conformidades",
+                documentos: v.url_plano_acao ? [{ nome: "Plano de Ação", url: v.url_plano_acao }] : [],
+                concluida: true
+            });
+        }
+
+        // Etapa 5: Itens em Acompanhamento
+        if(v.itens_plano_acao && v.itens_plano_acao.length > 0) {
+            const itensConcluidos = v.itens_plano_acao.filter(i => i.status === 'concluido').length;
+            etapas.push({
+                titulo: "Itens em Acompanhamento",
+                data: "Variável",
+                descricao: `${itensConcluidos} de ${v.itens_plano_acao.length} itens concluídos`,
+                documentos: [],
+                concluida: itensConcluidos === v.itens_plano_acao.length
+            });
+        }
+
+        // Etapa 6: Documento de Retorno
+        if(v.url_retorno_plano) {
+            etapas.push({
+                titulo: "Documento de Retorno Recebido",
+                data: v.data_retorno ? formatarDataSemFuso(v.data_retorno) : "---",
+                descricao: "Empresa apresentou documento comprovando execução do plano de ação",
+                documentos: [{ nome: "Documento de Retorno", url: v.url_retorno_plano }],
+                concluida: true
+            });
+        }
+
+        // Etapa 7: Processo Concluído
+        if(v.status_processo === 'concluido') {
+            etapas.push({
+                titulo: "Processo Concluído",
+                data: new Date().toLocaleDateString(),
+                descricao: "Processo finalizado com sucesso",
+                documentos: [],
+                concluida: true
+            });
+        }
+
+        // Desenhar timeline
+        const lineX = marginLeft + 5;
+        const contentX = marginLeft + 15;
+        const dotRadius = 3.5;
+
+        etapas.forEach((etapa, index) => {
+            // Verificar se precisa de nova página
+            if(yPos > 270) {
+                doc.addPage();
+                yPos = 20;
+            }
+
+            // Cor do ponto
+            const corPonto = etapa.concluida ? [39, 174, 96] : [149, 165, 166]; // Verde ou cinza
+            
+            // Linha vertical (conectar etapas)
+            if(index < etapas.length - 1) {
+                doc.setDrawColor(149, 165, 166);
+                doc.setLineWidth(0.5);
+                doc.line(lineX, yPos + 4, lineX, yPos + 25);
+            }
+
+            // Círculo (ponto da timeline)
+            doc.setFillColor(...corPonto);
+            doc.circle(lineX, yPos + 3, dotRadius, 'F');
+            doc.setDrawColor(...corPonto);
+            doc.setLineWidth(1.5);
+            doc.circle(lineX, yPos + 3, dotRadius + 1.5);
+
+            // Ícone dentro do círculo
+            if(etapa.concluida) {
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(6);
+                doc.setFont("helvetica", "bold");
+                doc.text("✓", lineX, yPos + 4.5, { align: "center" });
+            }
+
+            // Título da etapa
+            doc.setTextColor(44, 62, 80);
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(10);
+            doc.text(etapa.titulo, contentX, yPos + 2);
+
+            // Data
+            doc.setTextColor(52, 152, 219);
+            doc.setFont("helvetica", "italic");
+            doc.setFontSize(9);
+            doc.text(`Data: ${etapa.data}`, contentX, yPos + 7);
+
+            // Descrição
+            doc.setTextColor(0, 0, 0);
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(8.5);
+            const linhasDesc = doc.splitTextToSize(etapa.descricao, contentWidth - 10);
+            let descY = yPos + 11;
+            linhasDesc.forEach(linha => {
+                doc.text(linha, contentX, descY);
+                descY += 3.5;
+            });
+
+            // Documentos anexados
+            if(etapa.documentos && etapa.documentos.length > 0) {
+                doc.setTextColor(192, 57, 43);
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(8);
+                doc.text("Documentos:", contentX, descY);
+                descY += 3;
+
+                etapa.documentos.forEach((doc_item) => {
+                    const linkText = `▶ ${doc_item.nome}`;
+                    
+                    doc.setTextColor(0, 0, 255);
+                    doc.setFont("helvetica", "underline");
+                    doc.setFontSize(8);
+                    doc.text(linkText, contentX + 2, descY);
+                    
+                    // Adicionar link ao texto
+                    try {
+                        const textWidth = doc.getTextWidth(linkText);
+                        doc.link(contentX + 2, descY - 2, textWidth, 3, { url: doc_item.url });
+                    } catch(e) {
+                        console.log('Erro ao criar link no PDF:', e);
+                    }
+                    
+                    descY += 3;
+                });
+            }
+
+            yPos = descY + 8;
+        });
+
+        // RODAPÉ
+        const pages = doc.internal.getNumberOfPages();
+        for(let i = 1; i <= pages; i++) {
+            doc.setPage(i);
+            doc.setDrawColor(0);
+            doc.setLineWidth(0.3);
+            doc.line(marginLeft, 285, pageWidth - marginRight, 285);
+            
+            doc.setFontSize(7);
+            doc.setTextColor(100, 100, 100);
+            doc.setFont("helvetica", "italic");
+            doc.text("Documento gerado eletronicamente pelo Sistema de Gestão SIM", centroX, 289, { align: "center" });
+            doc.text(`Página ${i} de ${pages} - Emitido em ${new Date().toLocaleDateString()} às ${new Date().toLocaleTimeString()}`, centroX, 293, { align: "center" });
+        }
+
+        doc.save(`TIMELINE_PROCESSO_${v.rnc_numero || 'RNC'}_${est.numero_sim}.pdf`);
+        
+        Swal.fire('Sucesso', 'PDF de linha do tempo gerado com sucesso!', 'success');
+
+    } catch (err) {
+        console.error(err);
+        Swal.fire('Erro', 'Falha ao gerar timeline. Verifique o console.', 'error');
+    }
+}
+
 window.gerarPDFListaDocumentos = async () => {
     const estId = new URLSearchParams(window.location.search).get('id');
     if (!estId) return Swal.fire('Erro', 'Estabelecimento não encontrado.', 'error');
@@ -1211,6 +1447,11 @@ window.setupProcessoVistoria = async (vistoriaId) => {
         document.getElementById('linkPlanoAcao').querySelector('a').href = v.url_plano_acao;
     }
 
+    if(v.url_retorno_plano) {
+        document.getElementById('linkRetornoPlano').style.display = 'block';
+        document.getElementById('linkRetornoPlano').querySelector('a').href = v.url_retorno_plano;
+    }
+
     // Carregar itens do plano de ação
     if(v.itens_plano_acao) {
         carregarItensPlanoAcao(v.itens_plano_acao);
@@ -1240,6 +1481,10 @@ function atualizarVisibilidadeProcesso() {
     // Mostrar seção itens se status for plano_recebido ou superior
     document.getElementById('secaoItensPlano').style.display = 
         ['plano_recebido', 'itens_cadastrados', 'concluido'].includes(status) ? 'block' : 'none';
+    
+    // Mostrar seção retorno se status for itens_cadastrados ou concluido
+    document.getElementById('secaoRetornoPlano').style.display = 
+        ['itens_cadastrados', 'concluido'].includes(status) ? 'block' : 'none';
 }
 
 function getNetlifyFunctionUrl(name) {
@@ -1373,6 +1618,16 @@ async function salvarProcesso(vistoriaId) {
             dadosUpdate.url_plano_acao = _supabase.storage.from('documentos-sim').getPublicUrl(nomeArquivo).data.publicUrl;
             dadosUpdate.status_processo = 'plano_recebido';
             dadosUpdate.data_plano_recebido = new Date().toISOString();
+        }
+
+        // Upload documento de retorno se houver
+        const fileRetorno = document.getElementById('arquivoRetornoPlano').files[0];
+        if(fileRetorno) {
+            const nomeArquivo = `retorno_plano_${vistoriaId}_${Date.now()}`;
+            const { error: upError } = await _supabase.storage.from('documentos-sim').upload(nomeArquivo, fileRetorno);
+            if (upError) throw new Error('Erro upload documento de retorno: ' + upError.message);
+            dadosUpdate.url_retorno_plano = _supabase.storage.from('documentos-sim').getPublicUrl(nomeArquivo).data.publicUrl;
+            dadosUpdate.data_retorno = new Date().toISOString();
         }
 
         await safeUpdateVistoria(vistoriaId, dadosUpdate);
@@ -1546,6 +1801,11 @@ window.editarVistoria = async (id) => {
             document.getElementById('linkPlanoAcao').querySelector('a').href = v.url_plano_acao;
         }
 
+        if(v.url_retorno_plano) {
+            document.getElementById('linkRetornoPlano').style.display = 'block';
+            document.getElementById('linkRetornoPlano').querySelector('a').href = v.url_retorno_plano;
+        }
+
         if(v.itens_plano_acao) {
             carregarItensPlanoAcao(v.itens_plano_acao);
         }
@@ -1595,6 +1855,10 @@ async function carregarVistorias(id) {
             ? `<button onclick="setupProcessoVistoria(${v.id})" style="background:#8e44ad; color:white; padding:5px 10px; border:none; cursor:pointer; border-radius:4px; font-weight:bold; font-size: 0.8rem;">${statusProcesso.replace('_', ' ').toUpperCase()}</button>`
             : '<span style="color:#95a5a6; font-weight:bold;">-</span>';
 
+        const btnTimeline = (v.status_processo && v.status_processo !== 'pendente' && v.status_processo !== 'rnc_gerado')
+            ? `<button onclick="gerarTimelineProcesso(${v.id})" style="background:#27ae60; color:white; padding:5px 10px; border:none; cursor:pointer; border-radius:4px; font-weight:bold; font-size: 0.8rem;" title="Gerar PDF com linha do tempo"><i class="fas fa-timeline"></i> Timeline</button>`
+            : '';
+
         tbody.innerHTML += `<tr>
             <td>${formatarDataSemFuso(v.data_vistoria)}</td>
             <td>${v.status.toUpperCase()}</td>
@@ -1604,6 +1868,7 @@ async function carregarVistorias(id) {
                 <div style="display:flex; gap:5px; flex-wrap:wrap;">
                     ${btnRNC}
                     ${btnProcesso}
+                    ${btnTimeline}
                     <button onclick="editarVistoria(${v.id})" class="btn-warning" style="background:#f39c12; color:white; padding:5px; border:none; cursor:pointer; border-radius:4px;" title="Editar"><i class="fas fa-edit"></i></button>
                     <button onclick="excluirVistoria(${v.id})" class="btn-danger" style="background:#c0392b; color:white; padding:5px; border:none; cursor:pointer; border-radius:4px;" title="Excluir"><i class="fas fa-trash"></i></button>
                 </div>
